@@ -71,7 +71,7 @@ Shell Access
 ## Running the Script
 
 ``` bash
-sudo python3 main.py
+sudo python3 autolxd.py
 ```
 
 Root privileges are required.
