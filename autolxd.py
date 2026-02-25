@@ -24,6 +24,8 @@ class LXD_Helper:
             base_url = self.get_offline_server()
         self.download_files(base_url)
         self.Set_LXD()
+        self.ImageLoad('/tmp/alpine/alpine-v3.13-x86_64-20210218_0139.tar.gz')
+        
     def cleanup(self):
 
         subprocess.run(["sudo", "lxc", "stop", "alpine-container", "--force"],stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -162,8 +164,7 @@ class LXD_Helper:
                 exit()
             else:
                 pass
-
-            
+       
     def Set_LXD(self):
 
         print("[+] Installing snapd and LXD...")
@@ -180,6 +181,10 @@ class LXD_Helper:
                             ["sudo", "snap", "ack", "/tmp/alpine/lxd_37395.assert"],
                             ["sudo", "snap", "install", "/tmp/alpine/lxd_37395.snap"],
                    ]
+
+        if not commands:
+            print("[+] Nothing to install. Skipping installation phase.")
+            return           
 
         for cmd in commands:
             try:
