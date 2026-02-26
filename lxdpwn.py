@@ -104,7 +104,7 @@ class LXD_Helper:
         
         print_section("NETWORK CONFIGURATION")
         if self.check_connection():
-            base_url = "https://github.com/jac11/LXD_Helper/releases/download/Lxd%2Bhelper/"
+            base_url = "https://github.com/jac11/LXDPwn/Public/releases/download/Lxd%2Bhelper/"
         else:
             base_url = self.get_offline_server()
             
