@@ -1,4 +1,3 @@
-Here's the updated README with the correct release URL:
 
 # 🚀 LXDPwn - Advanced LXD Privilege Escalation Framework
 
