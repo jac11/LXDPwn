@@ -217,12 +217,12 @@ mkdir -p ~/lxd-offline && cd ~/lxd-offline
 ./lxdpwn.py --download-only
 
 # Or manual download
-wget https://github.com/jac11/LXD_Helper/releases/download/Lxd%2Bhelper/alpine-v3.13-x86_64-20210218_0139.tar.gz
-wget https://github.com/jac11/LXD_Helper/releases/download/Lxd%2Bhelper/core_17272.assert
-wget https://github.com/jac11/LXD_Helper/releases/download/Lxd%2Bhelper/core_17272.snap
-wget https://github.com/jac11/LXD_Helper/releases/download/Lxd%2Bhelper/lxd_37395.assert
-wget https://github.com/jac11/LXD_Helper/releases/download/Lxd%2Bhelper/lxd_37395.snap
-wget https://github.com/jac11/LXD_Helper/releases/download/Lxd%2Bhelper/snapd_2.71-3+b1_amd64.deb
+wget https://github.com/jac11/LXDPwn/releases/download/LXDPwn/alpine-v3.13-x86_64-20210218_0139.tar.gz
+wget https://github.com/jac11/LXDPwn/releases/download/Lxd%2Bhelper/core_17272.assert
+wget https://github.com/jac11/LXDPwn/releases/download/Lxd%2Bhelper/core_17272.snap
+wget https://github.com/jac11/LXDPwn/releases/download/Lxd%2Bhelper/lxd_37395.assert
+wget https://github.com/jac11/LXDPwn/releases/download/Lxd%2Bhelper/lxd_37395.snap
+wget https://github.com/jac11/LXDPwn/releases/download/Lxd%2Bhelper/snapd_2.71-3+b1_amd64.deb
 
 # Start HTTP server
 python3 -m http.server 8000 --bind 0.0.0.0
