@@ -21,7 +21,11 @@ class Colors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
     END = '\033[0m'
-
+INFP = f"{Colors.RED}  INFO ...... | "
+File = f"{Colors.HEADER}   available    ...... | "
+SER = f"{Colors.RED}  SERVER ...... | "
+STA = f"{Colors.HEADER}⏸️  Status ...... | "
+DO = f"{Colors.WHITE}   📌  Downloading  ...... | "
 DOWNLOAD_DIR = os.path.expanduser("~/lxd-offline")
 DEFAULT_PORT = 8000
 
@@ -51,16 +55,16 @@ def print_banner():
     print(banner)
 
 def print_step(step, message):
-
+    
     steps = {
-        'info': f"{Colors.BLUE}ℹ️{Colors.END}",
-        'success': f"{Colors.GREEN}✅{Colors.END}",
-        'warning': f"{Colors.YELLOW}⚠️{Colors.END}",
-        'error': f"{Colors.RED}❌{Colors.END}",
-        'download': f"{Colors.CYAN}📥{Colors.END}",
-        'server': f"{Colors.CYAN}🚀{Colors.END}",
-        'folder': f"{Colors.CYAN}📁{Colors.END}",
-        'skip': f"{Colors.YELLOW}⏭️{Colors.END}"
+        'info': f"{Colors.BLUE}{STA}{Colors.END}",
+        'success': f"{Colors.GREEN}✅{INFP}{Colors.END}",
+        'warning': f"{Colors.YELLOW}⚠️{INFP} {Colors.END}",
+        'error': f"{Colors.RED}❌{INFP}{Colors.END}",
+        'download': f"{Colors.CYAN}📥{INFP} {Colors.END}",
+        'server': f"{Colors.CYAN}🚀{INFP}{Colors.END}",
+        'folder': f"{Colors.CYAN}📁{INFP} {Colors.END}",
+        'skip': f"{Colors.YELLOW}    ✔️{File} {Colors.END}"
     }
     icon = steps.get(step, '•')
     print(f"{icon} {message}")
@@ -78,7 +82,7 @@ def get_port():
     while True:
         try:
             print()
-            port_input = input(f"{Colors.YELLOW}🔌 Enter port number [default: {DEFAULT_PORT}]: {Colors.END}").strip()
+            port_input = input(f"{Colors.YELLOW}🔌{INFP} Enter port number [default: {DEFAULT_PORT}]: {Colors.END}").strip()
             if not port_input:
                 return DEFAULT_PORT
             port = int(port_input)
@@ -112,13 +116,13 @@ def download_file(url, filename):
                         
                         elapsed = time.time() - start_time
                         speed = downloaded / elapsed if elapsed > 0 else 0
-                        
-                        sys.stdout.write(f'\r  {bar} {percent:.1f}% | {format_size(downloaded)}/{format_size(total_size)} | {format_size(speed)}/s')
+                        print_step = f"{Colors.YELLOW}  Downloading {Colors.RED} {Colors.BOLD}{filename}{Colors.END}..."
+                        sys.stdout.write(f'\r {DO} {bar} {print_step}{percent:.1f}% | {format_size(downloaded)}/{format_size(total_size)} | {format_size(speed)}/s')
                         sys.stdout.flush()
+
         
         os.rename(filename + '.tmp', filename)
         print()
-        print_step('success', f"{filename} downloaded successfully")
         return True
         
     except Exception as e:
@@ -145,7 +149,7 @@ def main():
             print_step('skip', f"{filename} ({Colors.BOLD}{format_size(size)}{Colors.END})")
         else:
             url = f"{BASE_URL}/{filename}"
-            print_step('download', f"Downloading {Colors.BOLD}{filename}{Colors.END}...")
+            
             download_file(url, filename)
    
     files_list = []
@@ -158,7 +162,7 @@ def main():
             files_list.append((filename, size, modified))
     
        
-    
+    print()
    
     print_step('info', f"Total: {Colors.BOLD}{len(files_list)} files ({format_size(total_size)}){Colors.END}")
     
@@ -166,12 +170,8 @@ def main():
     port = get_port()
    
     print()
-    print_step('server', f"{Colors.BOLD}Starting HTTP server on port {port}...{Colors.END}")
-    print_step('folder', f"Serving files from: {Colors.BOLD}{DOWNLOAD_DIR}{Colors.END}")
-    print()
-    print(f"{Colors.GREEN}💡 On target machines, use:{Colors.END}")
-    print(f"   {Colors.YELLOW}curl -O http://YOUR_IP:{port}/<filename>{Colors.END}")
-    print(f"   {Colors.YELLOW}wget http://YOUR_IP:{port}/<filename>{Colors.END}")
+    print_step('server', f"{Colors.BOLD} Starting HTTP server on port {port}...{Colors.END}")
+    print_step('folder',f"Serving files from: {Colors.BOLD}{DOWNLOAD_DIR}{Colors.END}")
     print()
     print(f"{Colors.YELLOW}⏸️  Press Ctrl+C to stop the server{Colors.END}")
     print()
@@ -186,7 +186,7 @@ def main():
                 print(f"{Colors.GREEN}📤 {Colors.END}{Colors.WHITE}{filename}{Colors.END} {Colors.CYAN}served{Colors.END}")
     
     httpd = HTTPServer(("0.0.0.0", port), ColorHandler)
-    print(f" Server Start 0.0.0.0:{port}{Colors.BOLD}")
+    print(f"{STA} Server Start 0.0.0.0:{port}{Colors.BOLD}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -203,5 +203,5 @@ if __name__ == "__main__":
         print_step('info', f"{Colors.BOLD}Setup cancelled{Colors.END}")
         sys.exit(0)
     except Exception as e:
-        print_step('error', f"Unexpected error: {e}")
-        sys.exit(1)
+       print_step('error', f"Unexpected error: {e}")
+       sys.exit(1)
