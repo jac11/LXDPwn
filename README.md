@@ -211,35 +211,67 @@ chroot /mnt/root /bin/bash
 ```
 
 ---
+I'll update the README to properly handle the offline mode description with the two-script approach:
 
 ## 🌍 Offline Mode
 
-### Setting Up Offline Server
+### Complete Offline Exploitation Setup
 
-#### On Internet-Connected Machine:
-```bash
-# Create download directory
-mkdir -p ~/lxd-offline && cd ~/lxd-offline
+When attacking air-gapped targets with no internet access, use this two-script approach:
 
-# Download all required files
-wget https://github.com/jac11/LXDPwn/releases/download/LXDPwn/alpine-v3.13-x86_64-20210218_0139.tar.gz
-wget https://github.com/jac11/LXDPwn/releases/download/LXDPwn/core_17272.assert
-wget https://github.com/jac11/LXDPwn/releases/download/LXDPwn/core_17272.snap
-wget https://github.com/jac11/LXDPwn/releases/download/LXDPwn/lxd_37395.assert
-wget https://github.com/jac11/LXDPwn/releases/download/LXDPwn/lxd_37395.snap
-wget https://github.com/jac11/LXDPwn/releases/download/LXDPwn/snapd_2.71-3+b1_amd64.deb
+#### 📡 **On Your Internet-Connected Machine (Attacker)**
 
-# Start HTTP server
-python3 -m http.server 8000 --bind 0.0.0.0
+Run the offline server script to download all required files and host them locally:
+
+**What happens:**
+- Script automatically downloads all required files (Alpine image, snap packages, etc.)
+- You'll be prompted to choose a port for the local server
+- Script starts an HTTP server on your chosen port
+- Server IP and port will be displayed for the target machine to connect
+
+**Example output:**
+```
+_    __  ______  ______        ___   _ 
+| |   \ \/ /  _ \|  _ \ \      / / \ | |
+| |    \  /| | | | |_) \\ /\ / /|  \| |
+| |___ /  \| |_| |  __/ \ V  V / | |\  |
+|_____/_/\_\____/|_|     \_/\_/  |_| \_|
+               offline server
+                 @jacstory
+
+
+📁  INFO ...... |   Working directory: /home/jacstory/lxd-offline
+⏸️  Status ...... |  Checking files...
+
+    ✔️   available    ...... |   alpine-v3.13-x86_64-20210218_0139.tar.gz (3.1 MB)
+    ✔️   available    ...... |   core_17272.assert (4.4 KB)
+    ✔️   available    ...... |   core_17272.snap (105.0 MB)
+    ✔️   available    ...... |   lxd_37395.assert (4.8 KB)
+    ✔️   available    ...... |   lxd_37395.snap (118.4 MB)
+    ✔️   available    ...... |   snapd_2.71-3+b1_amd64.deb (18.2 MB)
+
+⏸️  Status ...... |  Total: 6 files (244.7 MB)
+
+🔌  INFO ...... |  Enter port number [default: 8000]: 9000
+
+🚀  INFO ...... |   Starting HTTP server on port 9000...
+📁  INFO ...... |   Serving files from: /home/jacstory/lxd-offline
+
+⏸️  Press Ctrl+C to stop the server
+
+⏸️  Status ...... |  Server Start 0.0.0.0:9000
+
 ```
 
-#### On Target Machine:
+#### 🎯 **On Target Machine (Victim)**
+
+Run the main LXDPwn script and provide the attacker's server details:
+
 ```bash
 sudo python3 lxdpwn.py
-# Enter offline server IP when prompted
 ```
+### File List (Automatically Downloaded)
 
-### File List with Checksums
 | File | Size | Purpose |
 |------|------|---------|
 | alpine-v3.13-x86_64-20210218_0139.tar.gz | 3.1 MB | Alpine Linux container image |
@@ -248,7 +280,6 @@ sudo python3 lxdpwn.py
 | lxd_37395.assert | 1.3 KB | LXD snap assertion |
 | lxd_37395.snap | 118 MB | LXD snap package |
 | snapd_2.71-3+b1_amd64.deb | 18.2 MB | snapd package |
-
 ---
 
 ## 📊 System Requirements
