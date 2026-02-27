@@ -231,7 +231,7 @@ Run the offline server script to download all required files and host them local
 
 **Example output:**
 ```
-_    __  ______  ______        ___   _ 
+ _    __  ______  ______        ___   _ 
 | |   \ \/ /  _ \|  _ \ \      / / \ | |
 | |    \  /| | | | |_) \\ /\ / /|  \| |
 | |___ /  \| |_| |  __/ \ V  V / | |\  |
