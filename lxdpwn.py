@@ -91,6 +91,7 @@ def print_success_box(message):
 
 class LXD_Helper:
     def __init__(self):
+      
         print_banner()
         self.download_path = "/tmp/alpine"
         os.makedirs(self.download_path, exist_ok=True)
@@ -118,6 +119,48 @@ class LXD_Helper:
         
         print_section("CONTAINER SETUP")
         self.ImageLoad('/tmp/alpine/alpine-v3.13-x86_64-20210218_0139.tar.gz')
+
+    # THIS METHOD SHOULD BE OUTSIDE __init__, AT CLASS LEVEL
+    def check_sudo_access(self):
+        """Check if user has sudo access and cache password once"""
+        print_step(S.INFO, S.B, "SUDO", "Checking sudo access...")
+        
+        try:
+            # Test if sudo is already cached
+            subprocess.run(["sudo", "-n", "true"], 
+                          stdout=subprocess.DEVNULL, 
+                          stderr=subprocess.DEVNULL, 
+                          check=True)
+            print_step(S.SUCCESS, S.G, "SUDO", "Sudo access available (cached)")
+            print()
+            return True
+        except subprocess.CalledProcessError:
+            # Need to ask for password once
+            print_step(S.WARNING, S.Y, "SUDO", "Password required for some operations")
+            print()
+            
+            # Ask for password once using sudo -v (updates timestamp)
+            try:
+                # This will prompt for password
+                result = subprocess.run(["sudo", "-v"], 
+                                       stderr=subprocess.PIPE,
+                                       text=True)
+                
+                if result.returncode == 0:
+                    print_step(S.SUCCESS, S.G, "SUDO", "Authentication successful")
+                    print()
+                    return True
+                else:
+                    print_step(S.ERROR, S.R, "SUDO", "Authentication failed")
+                    return False
+                    
+            except KeyboardInterrupt:
+                print()
+                print_step(S.ERROR, S.R, "SUDO", "Authentication cancelled")
+                sys.exit(1)
+            except Exception as e:
+                print_step(S.ERROR, S.R, "SUDO", f"Error: {str(e)}")
+                return False
     
     def run_cmd(self, cmd, **kwargs):
   
@@ -136,8 +179,9 @@ class LXD_Helper:
         print_step(S.SUCCESS, S.G, "DONE", "Cleanup completed successfully")
     
     def Check_compatibility(self):
+       
         print_step(S.INFO, S.B, "SYSTEM", "Checking system compatibility...")
-     
+        
         username = os.getenv("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name
         user_info = pwd.getpwnam(username)
         groups = [
@@ -145,9 +189,9 @@ class LXD_Helper:
             if username in g.gr_mem or g.gr_gid == user_info.pw_gid
         ]
         
-        print_substep(f"User: {S.O}{username}{S.E}")
-        print_substep(f"Groups: {S.O}{', '.join(groups)}{S.E}")
-  
+        print_substep(f"User: {username}")
+        print_substep(f"Groups: {', '.join(groups)}")
+        
         is_root = os.geteuid() == 0
         in_lxd_group = "lxd" in groups
         
@@ -157,8 +201,12 @@ class LXD_Helper:
             return True
         elif in_lxd_group:
             print_step(S.SUCCESS, S.G, "OK", f"User in lxd group — container access granted")
-            print_step(S.WARNING, S.Y, "NOTE", "Some commands will use sudo")
             self.need_sudo = True
+
+            if not self.check_sudo_access():
+                print_step(S.ERROR, S.R, "ERROR", "Cannot proceed without sudo access")
+                sys.exit(1)
+                
             return True
         else:
             print_step(S.ERROR, S.R, "ERROR", f"User {username} not in lxd group and not root")
