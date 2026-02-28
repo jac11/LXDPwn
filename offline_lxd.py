@@ -26,6 +26,8 @@ File = f"{Colors.HEADER}   available    ...... | "
 SER = f"{Colors.RED}  SERVER ...... | "
 STA = f"{Colors.HEADER}⏸️  Status ...... | "
 DO = f"{Colors.WHITE}   📌  Downloading  ...... | "
+
+
 DOWNLOAD_DIR = os.path.expanduser("~/lxd-offline")
 DEFAULT_PORT = 8000
 
@@ -181,12 +183,12 @@ def main():
     
     class ColorHandler(SimpleHTTPRequestHandler):
         def log_message(self, format, *args):
-            if args[1] == 200:
-                filename = args[0].split()[1][1:]
-                print(f"{Colors.GREEN}📤 {Colors.END}{Colors.WHITE}{filename}{Colors.END} {Colors.CYAN}served{Colors.END}")
+            filename = args[0].split()[1][1:]
+            print(f"{Colors.GREEN}    🎯 GET / HTTP/1.1 200  ------ |  {Colors.END}{Colors.WHITE}{filename}{Colors.END} {Colors.CYAN}{Colors.END}")
     
     httpd = HTTPServer(("0.0.0.0", port), ColorHandler)
     print(f"{STA} Server Start 0.0.0.0:{port}{Colors.BOLD}")
+    print()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
