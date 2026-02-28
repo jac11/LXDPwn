@@ -32,7 +32,7 @@ class S:
     CONTAINER = "📦"
     SHELL = "💻 "
     CLEAN = "🧹"
-    WAIT = "⏳ "
+    WAIT = "⏳"
     ARROW = "→ "
     STAR = "⭐ "
     GITHUB = "🐙 "
@@ -94,6 +94,8 @@ class LXD_Helper:
         print_banner()
         self.download_path = "/tmp/alpine"
         os.makedirs(self.download_path, exist_ok=True)
+
+        self.need_sudo = False
         
         print_section("INITIALIZATION")
         print_step(S.INFO, S.B, "WORKSPACE", f"Download directory: {self.download_path}")
@@ -116,24 +118,26 @@ class LXD_Helper:
         
         print_section("CONTAINER SETUP")
         self.ImageLoad('/tmp/alpine/alpine-v3.13-x86_64-20210218_0139.tar.gz')
+    
+    def run_cmd(self, cmd, **kwargs):
+  
+        if self.need_sudo and cmd[0] != "sudo":
+            cmd = ["sudo"] + cmd
+        return subprocess.run(cmd, **kwargs)
         
     def cleanup(self):
         print_step(S.CLEAN, S.Y, "CLEANUP", "Stopping and removing containers...")
-        subprocess.run(["sudo", "lxc", "stop", "alpine-container", "--force"],
+        self.run_cmd(["lxc", "stop", "alpine-container", "--force"],
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.run(["sudo", "lxc", "delete", "alpine-container"],
+        self.run_cmd(["lxc", "delete", "alpine-container"],
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.run(["sudo", "lxc", "image", "delete", "alpine-local"],
+        self.run_cmd(["lxc", "image", "delete", "alpine-local"],
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         print_step(S.SUCCESS, S.G, "DONE", "Cleanup completed successfully")
     
     def Check_compatibility(self):
         print_step(S.INFO, S.B, "SYSTEM", "Checking system compatibility...")
-        
-        if os.geteuid() != 0:
-            print_step(S.ERROR, S.R, "ERROR", "This script must be run as root")
-            sys.exit(1)
-            
+     
         username = os.getenv("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name
         user_info = pwd.getpwnam(username)
         groups = [
@@ -143,17 +147,24 @@ class LXD_Helper:
         
         print_substep(f"User: {S.O}{username}{S.E}")
         print_substep(f"Groups: {S.O}{', '.join(groups)}{S.E}")
-
-        if os.geteuid() == 0:
-            print_step(S.SUCCESS, S.G, "OK", "Running as root — LXD group not requiR")
+  
+        is_root = os.geteuid() == 0
+        in_lxd_group = "lxd" in groups
+        
+        if is_root:
+            print_step(S.SUCCESS, S.G, "OK", "Running as root — full access granted")
+            self.need_sudo = False
             return True
-            
-        if "lxd" not in groups:
-            print_step(S.WARNING, S.Y, "WARN", f"User {username} not in group LXD")
-            return False
-            
-        print_step(S.SUCCESS, S.G, "OK", "Compatibility check passed")
-        return True
+        elif in_lxd_group:
+            print_step(S.SUCCESS, S.G, "OK", f"User in lxd group — container access granted")
+            print_step(S.WARNING, S.Y, "NOTE", "Some commands will use sudo")
+            self.need_sudo = True
+            return True
+        else:
+            print_step(S.ERROR, S.R, "ERROR", f"User {username} not in lxd group and not root")
+            print_substep("Add user to lxd group: sudo usermod -aG lxd " + username)
+            print_substep("Then log out and back in")
+            sys.exit(1)
 
     def check_connection(self):
         print_step(S.INFO, S.B, "NETWORK", "Checking internet connection...")
@@ -181,69 +192,83 @@ class LXD_Helper:
             server_port = 80
             
         print()
-        print_step(S.SUCCESS, S.G, "SERVER", f"ConfiguR: {S.O}{server_ip}:{server_port}{S.E}")
+        print_step(S.SUCCESS, S.G, "SERVER", f"Configured: {S.O}{server_ip}:{server_port}{S.E}")
         return f"http://{server_ip}:{server_port}/"
 
     def download_files(self, base_url):
-        print_step(S.DOWNLOAD, S.C, "START", "Beginning download process...")
-        print()
+ 
+            print_step(S.DOWNLOAD, S.C, "START", "Downloading required files...")
+            print()
 
-        files = {
-            "alpine-v3.13-x86_64-20210218_0139.tar.gz": "Alpine Linux Image",
-            "core_17272.assert": "Core Snap Assertion",
-            "core_17272.snap": "Core Snap Package",
-            "lxd_37395.assert": "LXD Snap Assertion",
-            "lxd_37395.snap": "LXD Snap Package",
-            "snapd_2.71-3+b1_amd64.deb": "Snapd Package",
-        }
+            files = {
+                "alpine-v3.13-x86_64-20210218_0139.tar.gz": "Alpine Linux",
+                "core_17272.assert": "Core Assert",
+                "core_17272.snap": "Core Snap",
+                "lxd_37395.assert": "LXD Assert",
+                "lxd_37395.snap": "LXD Snap",
+                "snapd_2.71-3+b1_amd64.deb": "Snapd",
+            }
 
-        total_files = len(files)
-        completed = 0
-        total_bytes = 0
-        
-        for filename, description in files.items():
-            url = base_url + filename
-            save_path = os.path.join(self.download_path, filename)
+            total_files = len(files)
+            completed = 0
+            total_bytes = 0
+            
+            print(f"    {S.C}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{S.E}")
+            print()
+            
+            for filename, short_name in files.items():
+                save_path = os.path.join(self.download_path, filename)
 
-            if os.path.exists(save_path) and os.path.getsize(save_path) > 0:
-                file_size = os.path.getsize(save_path)
-                total_bytes += file_size
-                print_step(S.SUCCESS, S.G, "EXISTS", f"{filename} ({description})")
-                completed += 1
-                continue
-                
-            try:
-                print(f"    {S.C}↓{S.E} {S.O}{description}{S.E}")
-                print(f"    {S.C}  └─{S.E} {S.W}{filename}{S.E}")
-                
-                response = requests.get(url, stream=True, timeout=15)
-                response.raise_for_status()
-                
-                total_size = int(response.headers.get('content-length', 0))
-                downloaded = 0
+                if os.path.exists(save_path) and os.path.getsize(save_path) > 0:
+                    file_size = os.path.getsize(save_path)
+                    total_bytes += file_size
+                    print(f"    {S.G}✔{S.E} {short_name:15} {S.W}{file_size/1024/1024:5.1f} MB{S.E} {S.G}(cached){S.E}")
+                    completed += 1
+                    continue
+                    
+                try:
+                    response = requests.get(base_url + filename, stream=True, timeout=15)
+                    response.raise_for_status()
+                    
+                    total_size = int(response.headers.get('content-length', 0))
+                    downloaded = 0
 
-                with open(save_path, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                            if total_size > 0:
-                                print_progress_bar(downloaded, total_size, filename[:25])
-                
-                print()
-                total_bytes += downloaded
-                print_step(S.SUCCESS, S.G, "DONE", f"{description} downloaded")
-                completed += 1
+                    # Initial status
+                    sys.stdout.write(f"    {S.C}↓{S.E} {short_name:15} ")
+                    sys.stdout.write(f"{S.W}[{S.E}{'░' * 20}{S.W}]{S.E} 0%")
+                    sys.stdout.flush()
 
-            except requests.RequestException as e:
-                print()  # New line after progress bar
-                print_step(S.ERROR, S.R, "FAILED", f"{description} - {str(e)[:50]}")
+                    with open(save_path, "wb") as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                                downloaded += len(chunk)
+                                if total_size > 0:
+                                    percent = int(20 * downloaded / total_size)
+                                    bar = '█' * percent + '░' * (20 - percent)
+                                    
+                                    # Update the same line
+                                    sys.stdout.write(f"\r    {S.C}↓{S.E} {short_name:15} ")
+                                    sys.stdout.write(f"{S.G}[{bar}]{S.E} ")
+                                    sys.stdout.write(f"{S.W}{int(100 * downloaded / total_size):3d}%{S.E}")
+                                    sys.stdout.flush()
+                    
+                    # Final update with size
+                    sys.stdout.write(f"\r    {S.G}✓{S.E} {short_name:15} ")
+                    sys.stdout.write(f"{S.G}[{'█' * 20}]{S.E} ")
+                    sys.stdout.write(f"{S.W}100%{S.E} ")
+                    sys.stdout.write(f"{S.M}({downloaded/1024/1024:5.1f} MB){S.E}\n")
+                    
+                    total_bytes += downloaded
+                    completed += 1
 
-        print()
-        print_step(S.SUCCESS, S.G, "SUMMARY", f"Downloaded {completed}/{total_files} files")
-        print_substep(f"Total size: {S.M}{total_bytes/(1024*1024):.1f} MB{S.E}")
-        print_substep(f"Location: {S.C}{self.download_path}{S.E}")
-        
+                except requests.RequestException as e:
+                    sys.stdout.write(f"\r    {S.R}✗{S.E} {short_name:15} {S.R}Failed{S.E}\n")
+
+            print()
+            print(f"    {S.C}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{S.E}")
+            print_step(S.SUCCESS, S.G, "SUMMARY", f"Downloaded {completed}/{total_files} files")
+            print_substep(f"Total size: {S.M}{total_bytes/(1024*1024):.1f} MB{S.E}")
     def Check_LXD_Status(self):
         print_step(S.INFO, S.B, "STATUS", "Checking LXD installation status...")
         
@@ -252,7 +277,7 @@ class LXD_Helper:
         self.lxd_initialized = True
         
         try:
-            result = subprocess.run(["snap", "version"], check=True,
+            result = self.run_cmd(["snap", "version"], check=True,
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             version = result.stdout.split('\n')[0].split()[-1] if result.stdout else "unknown"
             print_step(S.SUCCESS, S.G, "SNAP", f"snapd is installed (v{version})")
@@ -262,7 +287,7 @@ class LXD_Helper:
 
    
         try:
-            result = subprocess.run(["snap", "list", "lxd"], check=True,
+            result = self.run_cmd(["snap", "list", "lxd"], check=True,
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             print_step(S.SUCCESS, S.G, "LXD", "LXD snap is installed")
         except (subprocess.CalledProcessError, FileNotFoundError):
@@ -271,7 +296,7 @@ class LXD_Helper:
             
 
         try:
-            result = subprocess.run(["lxc", "info"], check=True,
+            result = self.run_cmd(["lxc", "info"], check=True,
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
        
             for line in result.stdout.split('\n'):
@@ -288,7 +313,7 @@ class LXD_Helper:
         if self.snap_installed and self.lxd_installed and self.lxd_initialized:
             print_step(S.SUCCESS, S.G, "READY", "LXD is fully ready")
         else:
-            print_step(S.INFO, S.B, "NEXT", "Additional installation requiR")
+            print_step(S.INFO, S.B, "NEXT", "Additional installation required")
         try:
             checkPath = os.listdir('/tmp/alpine')
             expected = ['snapd_2.71-3+b1_amd64.deb', 'lxd_37395.snap',
@@ -297,7 +322,7 @@ class LXD_Helper:
             
             if sorted(checkPath) == sorted(expected):
                 print()
-                print_success_box("✨ All requiR files are ready! ✨")
+                print_success_box("✨ All required files are ready! ✨")
                 print()
                 self.ImageLoad('/tmp/alpine/alpine-v3.13-x86_64-20210218_0139.tar.gz')
                 exit()
@@ -310,27 +335,27 @@ class LXD_Helper:
         
         commands = []
         if not self.snap_installed:
-            commands.appE({
-                "cmd": ["sudo", "dpkg", "-i", "/tmp/alpine/snapd_2.71-3+b1_amd64.deb"],
+            commands.append({
+                "cmd": ["dpkg", "-i", "/tmp/alpine/snapd_2.71-3+b1_amd64.deb"],
                 "desc": "Installing snapd"
             })
             
         if not self.lxd_installed:
-            commands.extE([
+            commands.extend([
                 {
-                    "cmd": ["sudo", "snap", "ack", "/tmp/alpine/core_17272.assert"],
+                    "cmd": ["snap", "ack", "/tmp/alpine/core_17272.assert"],
                     "desc": "Acknowledging core snap"
                 },
                 {
-                    "cmd": ["sudo", "snap", "install", "/tmp/alpine/core_17272.snap"],
+                    "cmd": ["snap", "install", "/tmp/alpine/core_17272.snap"],
                     "desc": "Installing core snap"
                 },
                 {
-                    "cmd": ["sudo", "snap", "ack", "/tmp/alpine/lxd_37395.assert"],
+                    "cmd": ["snap", "ack", "/tmp/alpine/lxd_37395.assert"],
                     "desc": "Acknowledging LXD snap"
                 },
                 {
-                    "cmd": ["sudo", "snap", "install", "/tmp/alpine/lxd_37395.snap"],
+                    "cmd": ["snap", "install", "/tmp/alpine/lxd_37395.snap"],
                     "desc": "Installing LXD snap"
                 },
             ])
@@ -348,7 +373,7 @@ class LXD_Helper:
             print(f"    {S.C}  └─{S.E} {S.W}{cmd_str}{S.E}")
             
             try:
-                result = subprocess.run(cmd, check=True,
+                result = self.run_cmd(cmd, check=True,
                                       stdout=subprocess.PIPE,
                                       stderr=subprocess.PIPE,
                                       text=True)
@@ -364,11 +389,11 @@ class LXD_Helper:
         
         try:
             print_step(S.WAIT, S.B, "SNAP", "Starting snapd service...")
-            subprocess.run(["sudo", "systemctl", "start", "snapd"], check=True)
+            self.run_cmd(["systemctl", "start", "snapd"], check=True)
 
             print_step(S.WAIT, S.B, "WAIT", "Waiting for snap to be ready...")
             for attempt in range(10):
-                result = subprocess.run(["snap", "version"],
+                result = self.run_cmd(["snap", "version"],
                                       stdout=subprocess.PIPE,
                                       stderr=subprocess.PIPE)
                 if result.returncode == 0:
@@ -381,17 +406,17 @@ class LXD_Helper:
                 return
 
             print_step(S.INSTALL, S.M, "INIT", "Running automatic LXD init...")
-            subprocess.run(["sudo", "lxd", "init", "--auto"], check=True)
+            self.run_cmd(["lxd", "init", "--auto"], check=True)
 
             print_step(S.INFO, S.B, "VERIFY", "Verifying LXD installation...")
-            result = subprocess.run(["lxc", "info"],
+            result = self.run_cmd(["lxc", "info"],
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE,
                                   text=True)
 
             if result.returncode == 0:
                 print_step(S.SUCCESS, S.G, "READY", "LXD is fully initialized and working")
-                # Update status
+                
                 self.lxd_initialized = True
                 self.lxd_installed = True
             else:
@@ -406,7 +431,7 @@ class LXD_Helper:
 
         print_step(S.INSTALL, S.M, "LXD", "Ensuring LXD is initialized...")
         try:
-            subprocess.run(["sudo", "lxd", "init", "--auto"], check=True,
+            self.run_cmd(["lxd", "init", "--auto"], check=True,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             print_step(S.SUCCESS, S.G, "OK", "LXD is ready")
         except subprocess.CalledProcessError:
@@ -414,14 +439,14 @@ class LXD_Helper:
             return
 
         print_step(S.DOWNLOAD, S.C, "IMAGE", "Checking Alpine image...")
-        if subprocess.run(["lxc", "image", "list", "alpine-local", "--format", "json"],
+        if self.run_cmd(["lxc", "image", "list", "alpine-local", "--format", "json"],
                          capture_output=True).returncode == 0:
             print_step(S.SUCCESS, S.G, "EXISTS", "Image already loaded")
             self.cleanup()
 
         print_step(S.DOWNLOAD, S.C, "IMPORT", "Importing Alpine image...")
         try:
-            result = subprocess.run(["sudo", "lxc", "image", "import", imagepath, "--alias", "alpine-local"],
+            result = self.run_cmd(["lxc", "image", "import", imagepath, "--alias", "alpine-local"],
                                   check=True, capture_output=True, text=True)
          
             for line in result.stdout.split('\n'):
@@ -437,8 +462,8 @@ class LXD_Helper:
 
         print_step(S.CONTAINER, S.C, "LAUNCH", "Launching privileged container...")
         try:
-            result = subprocess.run([
-                "sudo", "lxc", "launch",
+            result = self.run_cmd([
+                "lxc", "launch",
                 "alpine-local",
                 "alpine-container",
                 "-c", "security.privileged=true",
@@ -449,7 +474,7 @@ class LXD_Helper:
             time.sleep(3)
             print_step(S.SUCCESS, S.G, "START", "Container is running")
       
-            status = subprocess.run(["lxc", "list", "alpine-container", "--format", "json"],
+            status = self.run_cmd(["lxc", "list", "alpine-container", "--format", "json"],
                                   capture_output=True, text=True)
             print_substep(f"Container: {S.O}alpine-container{S.E}")
             
@@ -459,8 +484,8 @@ class LXD_Helper:
 
         print_step(S.INSTALL, S.M, "MOUNT", "Mounting host filesystem...")
         try:
-            result = subprocess.run([
-                "sudo", "lxc", "config", "device", "add",
+            result = self.run_cmd([
+                "lxc", "config", "device", "add",
                 "alpine-container",
                 "host-root",
                 "disk",
@@ -469,18 +494,17 @@ class LXD_Helper:
                 "recursive=true"
             ], check=True, capture_output=True, text=True)
             print_step(S.SUCCESS, S.G, "MOUNT", "Host filesystem mounted at /mnt/root")
-            #print("[+] Attempting to chroot into host system...")
+            
             try:
-                # Try to chroot into the mounted host system
-                subprocess.run(
-                    ["sudo", "lxc", "exec", "alpine-container", "--", "chroot", "/mnt/root", "/bin/bash"],
+          
+                self.run_cmd(
+                    ["lxc", "exec", "alpine-container", "--", "chroot", "/mnt/root", "/bin/bash"],
                     check=True
                 )
             except subprocess.CalledProcessError:
                 print("[!] First chroot attempt failed, trying fallback...")
-                # Fallback: try with different path or without chroot
-                subprocess.run(
-                    ["sudo", "lxc", "exec", "alpine-container", "--", "chroot", "/mnt/root", "/bin/bash"],
+                self.run_cmd(
+                    ["lxc", "exec", "alpine-container", "--", "chroot", "/mnt/root", "/bin/bash"],
                     check=False
                 )
         except subprocess.CalledProcessError:
@@ -496,11 +520,11 @@ class LXD_Helper:
         print(f"    {S.Y}└─{S.E} Type {S.R}'exit'{S.E} to close the shell")
         print()
         
-        subprocess.run(["sudo", "lxc", "exec", "alpine-container", "--", "/bin/sh"])
+        self.run_cmd(["lxc", "exec", "alpine-container", "--", "/bin/sh"])
         
        
         print()
-        print_step(S.INFO, S.B, "SHELL", "Shell session Eed")
+        print_step(S.INFO, S.B, "SHELL", "Shell session ended")
         cleanup = input(f"    {S.Y}Cleanup container? (y/n){S.E}: ").strip().lower()
         if cleanup == 'y':
             self.cleanup()
