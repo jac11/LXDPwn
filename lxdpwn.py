@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 
 import requests
@@ -452,6 +451,7 @@ class LXD_Helper:
             print_step(S.SUCCESS, S.G, "READY", "LXD is fully ready")
         else:
             print_step(S.INFO, S.B, "NEXT", "Installation required")
+
             
     def Set_LXD(self):
         print_step(S.INSTALL, S.M, "BEGIN", "Starting LXD installation...")
@@ -462,29 +462,145 @@ class LXD_Helper:
             print_step(S.SUCCESS, S.G, "OK", "LXD already installed and initialized")
             return
         
-        # Check glibc version for snap compatibility
-        glibc_ok = True
-        if self.glibc_version:
-            try:
-                if float(self.glibc_version) < 2.38:
-                    print_step(S.WARNING, S.Y, "GLIBC", f"Version {self.glibc_version} < 2.38")
-                    print_substep("Snap packages may not work - will use apt instead")
-                    glibc_ok = False
-            except:
-                pass
+        # Check if snapd is installed
+        snapd_installed = False
+        try:
+            self.run_cmd_quiet(["snap", "version"], check=True)
+            snapd_installed = True
+            print_substep("Snapd is already installed")
+        except:
+            print_substep("Snapd not installed")
         
-        # Try snap installation only if snap is available AND glibc is new enough
-        if self.snap_available and glibc_ok:
-            print_substep("Snap available - attempting snap installation")
-            if self.install_lxd_via_snap():
-                return
+        # Install snapd if not installed
+        if not snapd_installed:
+            if self.online_mode:
+                # ONLINE: Use apt to install snapd (handles dependencies)
+                print_substep("Online mode - installing snapd via apt...")
+                try:
+                    self.run_cmd_quiet(["apt", "update"], check=True)
+                    self.run_cmd_quiet(["apt", "install", "snapd", "-y"], check=True)
+                    print_substep("Snapd installed via apt")
+                    
+                    # Wait for snapd to be ready
+                    time.sleep(3)
+                    
+                except subprocess.CalledProcessError as e:
+                    print_step(S.ERROR, S.R, "ERROR", f"Failed to install snapd: {e}")
+                    return False
             else:
-                print_substep("Snap installation failed - falling back to apt")
-                self.install_lxd_via_apt()
-        else:
-            print_substep("Using apt installation")
-            self.install_lxd_via_apt()
-    
+                # OFFLINE: Try to install from local .deb
+                snapd_deb = None
+                for f in os.listdir(self.download_path):
+                    if f.startswith("snapd") and f.endswith(".deb"):
+                        snapd_deb = os.path.join(self.download_path, f)
+                        break
+                
+                if snapd_deb:
+                    print_substep(f"Offline mode - installing snapd from {os.path.basename(snapd_deb)}...")
+                    try:
+                        self.run_cmd_quiet(["dpkg", "-i", snapd_deb], check=False)
+                        self.run_cmd_quiet(["apt-get", "install", "-f", "-y"], check=True)
+                        print_substep("Snapd installed from local file")
+                        time.sleep(3)
+                    except:
+                        print_step(S.ERROR, S.R, "ERROR", "Failed to install snapd from local file")
+                        return False
+                else:
+                    print_step(S.ERROR, S.R, "ERROR", "No snapd package found for offline installation")
+                    print_substep(f"Please place a snapd .deb file in {self.download_path}")
+                    return False
+        
+        # Verify snapd is working
+        try:
+            self.run_cmd_quiet(["snap", "version"], check=True)
+            print_substep("Snapd is working")
+        except:
+            print_step(S.ERROR, S.R, "ERROR", "Snapd installed but not responding")
+            return False
+        
+        # Now install LXD from local snap files
+        core_assert = os.path.join(self.download_path, "core_17272.assert")
+        core_snap = os.path.join(self.download_path, "core_17272.snap")
+        lxd_assert = os.path.join(self.download_path, "lxd_37395.assert")
+        lxd_snap = os.path.join(self.download_path, "lxd_37395.snap")
+        
+        # Check if all files exist
+        missing_files = []
+        for f, name in [(core_assert, "core assert"), (core_snap, "core snap"), 
+                        (lxd_assert, "lxd assert"), (lxd_snap, "lxd snap")]:
+            if not os.path.exists(f):
+                missing_files.append(name)
+        
+        if missing_files:
+            print_step(S.ERROR, S.R, "ERROR", f"Missing files: {', '.join(missing_files)}")
+            return False
+        
+        # Install core snap with --dangerous flag
+        print(f"    {S.C}[1/5]{S.E} Installing core snap... ", end="", flush=True)
+        try:
+            self.run_cmd_quiet(["snap", "ack", core_assert], check=True)
+            # Use --dangerous for local snap file
+            self.run_cmd_quiet(["snap", "install", "--dangerous", core_snap], check=True)
+            print(f"{S.G}✓{S.E}")
+        except subprocess.CalledProcessError as e:
+            print(f"{S.R}✗{S.E}")
+            # Try without --dangerous as fallback
+            print_substep("Retrying without --dangerous...")
+            try:
+                self.run_cmd_quiet(["snap", "install", core_snap], check=True)
+                print(f"    {S.C}   └─{S.E} {S.G}✓{S.E}")
+            except:
+                print_substep(f"Error: {e}")
+                return False
+        
+        # Install LXD snap with --dangerous flag
+        print(f"    {S.C}[2/5]{S.E} Installing LXD snap... ", end="", flush=True)
+        try:
+            self.run_cmd_quiet(["snap", "ack", lxd_assert], check=True)
+            # Use --dangerous for local snap file
+            self.run_cmd_quiet(["snap", "install", "--dangerous", lxd_snap], check=True)
+            print(f"{S.G}✓{S.E}")
+        except subprocess.CalledProcessError as e:
+            print(f"{S.R}✗{S.E}")
+            # Try without --dangerous as fallback
+            print_substep("Retrying without --dangerous...")
+            try:
+                self.run_cmd_quiet(["snap", "install", lxd_snap], check=True)
+                print(f"    {S.C}   └─{S.E} {S.G}✓{S.E}")
+            except:
+                print_substep(f"Error: {e}")
+                return False
+        
+        # Connect LXD (optional)
+        print(f"    {S.C}[3/5]{S.E} Connecting LXD... ", end="", flush=True)
+        try:
+            self.run_cmd_quiet(["snap", "connect", "lxd:lxd", "core:lxd"], check=False)
+            print(f"{S.G}✓{S.E}")
+        except:
+            print(f"{S.Y}⚠{S.E}")
+        
+        # Initialize LXD
+        print(f"    {S.C}[4/5]{S.E} Initializing LXD... ", end="", flush=True)
+        try:
+            self.run_cmd_quiet(["lxd", "init", "--auto"], check=True)
+            print(f"{S.G}✓{S.E}")
+        except:
+            print(f"{S.R}✗{S.E}")
+            return False
+        
+        # Add user to lxd group
+        print(f"    {S.C}[5/5]{S.E} Adding user to lxd group... ", end="", flush=True)
+        try:
+            username = os.getenv("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name
+            self.run_cmd_quiet(["usermod", "-aG", "lxd", username], check=True)
+            print(f"{S.G}✓{S.E}")
+        except:
+            print(f"{S.Y}⚠{S.E}")
+        
+        print_step(S.SUCCESS, S.G, "DONE", "LXD installed successfully")
+        self.lxd_installed = True
+        self.lxd_initialized = True
+        return True
     def install_lxd_via_snap(self):
         """Install LXD using snap packages"""
         commands = []
