@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 
 import requests
@@ -8,6 +9,7 @@ import subprocess
 import pwd
 import grp
 import time
+import re
 
 class S:
     H = '\033[95m'
@@ -91,36 +93,112 @@ def print_success_box(message):
 
 class LXD_Helper:
     def __init__(self):
-      
+  
         print_banner()
         self.download_path = "/tmp/alpine"
         os.makedirs(self.download_path, exist_ok=True)
 
-        self.need_sudo = False
+        self.need_sudo        = False
+        self.online_mode      = False
+        self.lxd_installed    = False
+        self.lxd_initialized  = False
+        self.snap_available   = False
+        self.glibc_version    = self.get_glibc_version()
         
         print_section("INITIALIZATION")
         print_step(S.INFO, S.B, "WORKSPACE", f"Download directory: {self.download_path}")
+        if self.glibc_version:
+            print_substep(f"System glibc: {self.glibc_version}")
         print()
 
         self.Check_compatibility()
+        
+        print(f"    {S.C}────────────────────────────────────────────{S.E}")
+        print()
+        
+        # Check if snap is available
+        self.check_snap_availability()
+        
         self.Check_LXD_Status()
         
+        # Check if Alpine image exists
+        alpine_path = os.path.join(self.download_path, "alpine-v3.13-x86_64-20210218_0139.tar.gz")
+        alpine_exists = os.path.exists(alpine_path)
+        
+        # If LXD is already installed AND Alpine image exists, skip to container
+        if self.lxd_installed and self.lxd_initialized and alpine_exists:
+            print_section("CONTAINER SETUP")
+            self.ImageLoad(alpine_path)
+            return  # Exit early
+        
+        # Otherwise, continue with network and download
         print_section("NETWORK CONFIGURATION")
-        if self.check_connection():
-            base_url = "https://github.com/jac11/LXDPwn/Public/releases/download/Lxd%2Bhelper/"
+        self.online_mode = self.check_connection()
+        
+        # Set base URL
+        if self.online_mode:
+            base_url = "https://github.com/jac11/LXDPwn/releases/download/LXDPwn/"
         else:
             base_url = self.get_offline_server()
             
         print_section("FILE DOWNLOAD")
         self.download_files(base_url)
         
-        print_section("LXD INSTALLATION")
-        self.Set_LXD()
+        # Check again after download
+        if not os.path.exists(alpine_path):
+            print_step(S.ERROR, S.R, "ERROR", "Alpine image not found! Cannot continue.")
+            sys.exit(1)
         
-        print_section("CONTAINER SETUP")
-        self.ImageLoad('/tmp/alpine/alpine-v3.13-x86_64-20210218_0139.tar.gz')
+        # Only install LXD if not already installed
+        if not (self.lxd_installed and self.lxd_initialized):
+            print_section("LXD INSTALLATION")
+            self.Set_LXD()
+        
+        # Proceed with container
+        if self.lxd_installed and self.lxd_initialized:
+            print_section("CONTAINER SETUP")
+            self.ImageLoad(alpine_path)
+        else:
+            print_step(S.ERROR, S.R, "ERROR", "LXD installation failed - cannot setup container")
+            print_substep("Try installing LXD manually: sudo apt install lxd lxd-client")
 
-    # THIS METHOD SHOULD BE OUTSIDE __init__, AT CLASS LEVEL
+    def get_glibc_version(self):
+        """Get system glibc version"""
+        try:
+            result = subprocess.run(["ldd", "--version"], 
+                                   capture_output=True, text=True)
+            version_match = re.search(r'(\d+\.\d+)', result.stdout)
+            if version_match:
+                return version_match.group(1)
+        except:
+            pass
+        return None
+
+    def check_snap_availability(self):
+        """Check if snap is available on the system"""
+        print_step(S.INFO, S.B, "SNAP", "Checking snap availability...")
+        
+        try:
+            # Check if snap command exists
+            result = subprocess.run(["which", "snap"], 
+                                   stdout=subprocess.PIPE, 
+                                   stderr=subprocess.PIPE)
+            if result.returncode == 0:
+                # Check if snapd is actually working
+                version_result = subprocess.run(["snap", "version"], 
+                                              stdout=subprocess.PIPE, 
+                                              stderr=subprocess.PIPE)
+                if version_result.returncode == 0:
+                    self.snap_available = True
+                    print_step(S.SUCCESS, S.G, "SNAP", "Snap is available")
+                    return True
+        except:
+            pass
+        
+        self.snap_available = False
+        print_step(S.WARNING, S.Y, "SNAP", "Snap is NOT available")
+        return False
+
     def check_sudo_access(self):
         """Check if user has sudo access and cache password once"""
         print_step(S.INFO, S.B, "SUDO", "Checking sudo access...")
@@ -141,7 +219,6 @@ class LXD_Helper:
             
             # Ask for password once using sudo -v (updates timestamp)
             try:
-                # This will prompt for password
                 result = subprocess.run(["sudo", "-v"], 
                                        stderr=subprocess.PIPE,
                                        text=True)
@@ -166,6 +243,18 @@ class LXD_Helper:
   
         if self.need_sudo and cmd[0] != "sudo":
             cmd = ["sudo"] + cmd
+        return subprocess.run(cmd, **kwargs)
+    
+    def run_cmd_quiet(self, cmd, **kwargs):
+        """Run command quietly with no output"""
+        if self.need_sudo and cmd[0] != "sudo":
+            cmd = ["sudo"] + cmd
+        
+        if 'stdout' not in kwargs:
+            kwargs['stdout'] = subprocess.DEVNULL
+        if 'stderr' not in kwargs:
+            kwargs['stderr'] = subprocess.DEVNULL
+            
         return subprocess.run(cmd, **kwargs)
         
     def cleanup(self):
@@ -245,233 +334,289 @@ class LXD_Helper:
 
     def download_files(self, base_url):
  
-            print_step(S.DOWNLOAD, S.C, "START", "Downloading required files...")
-            print()
+        print_step(S.DOWNLOAD, S.C, "START", "Downloading required files...")
+        print()
 
-            files = {
-                "alpine-v3.13-x86_64-20210218_0139.tar.gz": "Alpine Linux",
-                "core_17272.assert": "Core Assert",
-                "core_17272.snap": "Core Snap",
-                "lxd_37395.assert": "LXD Assert",
-                "lxd_37395.snap": "LXD Snap",
-                "snapd_2.71-3+b1_amd64.deb": "Snapd",
-            }
+        files = {
+            "alpine-v3.13-x86_64-20210218_0139.tar.gz": "Alpine Linux",
+            "core_17272.assert": "Core Assert",
+            "core_17272.snap": "Core Snap",
+            "lxd_37395.assert": "LXD Assert",
+            "lxd_37395.snap": "LXD Snap",
+            "snapd_2.71-3+b1_amd64.deb": "Snapd",
+        }
 
-            total_files = len(files)
-            completed = 0
-            total_bytes = 0
-            
-            print(f"    {S.C}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{S.E}")
-            print()
-            
-            for filename, short_name in files.items():
-                save_path = os.path.join(self.download_path, filename)
+        total_files = len(files)
+        completed = 0
+        total_bytes = 0
+        
+        print(f"    {S.C}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{S.E}")
+        print()
+        
+        for filename, short_name in files.items():
+            save_path = os.path.join(self.download_path, filename)
 
-                if os.path.exists(save_path) and os.path.getsize(save_path) > 0:
-                    file_size = os.path.getsize(save_path)
-                    total_bytes += file_size
-                    print(f"    {S.G}✔{S.E} {short_name:15} {S.W}{file_size/1024/1024:5.1f} MB{S.E} {S.G}(cached){S.E}")
-                    completed += 1
-                    continue
-                    
-                try:
-                    response = requests.get(base_url + filename, stream=True, timeout=15)
-                    response.raise_for_status()
-                    
-                    total_size = int(response.headers.get('content-length', 0))
-                    downloaded = 0
+            if os.path.exists(save_path) and os.path.getsize(save_path) > 0:
+                file_size = os.path.getsize(save_path)
+                total_bytes += file_size
+                print(f"    {S.G}✔{S.E} {short_name:15} {S.W}{file_size/1024/1024:5.1f} MB{S.E} {S.G}(cached){S.E}")
+                completed += 1
+                continue
+         
+                
+            try:
+                response = requests.get(base_url + filename, stream=True, timeout=15)
+                response.raise_for_status()
+                
+                total_size = int(response.headers.get('content-length', 0))
+                downloaded = 0
 
-                    # Initial status
-                    sys.stdout.write(f"    {S.C}↓{S.E} {short_name:15} ")
-                    sys.stdout.write(f"{S.W}[{S.E}{'░' * 20}{S.W}]{S.E} 0%")
-                    sys.stdout.flush()
+                sys.stdout.write(f"    {S.C}↓{S.E} {short_name:15} ")
+                sys.stdout.write(f"{S.W}[{S.E}{'░' * 20}{S.W}]{S.E} 0%")
+                sys.stdout.flush()
 
-                    with open(save_path, "wb") as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                                downloaded += len(chunk)
-                                if total_size > 0:
-                                    percent = int(20 * downloaded / total_size)
-                                    bar = '█' * percent + '░' * (20 - percent)
-                                    
-                                    # Update the same line
-                                    sys.stdout.write(f"\r    {S.C}↓{S.E} {short_name:15} ")
-                                    sys.stdout.write(f"{S.G}[{bar}]{S.E} ")
-                                    sys.stdout.write(f"{S.W}{int(100 * downloaded / total_size):3d}%{S.E}")
-                                    sys.stdout.flush()
-                    
-                    # Final update with size
-                    sys.stdout.write(f"\r    {S.G}✓{S.E} {short_name:15} ")
-                    sys.stdout.write(f"{S.G}[{'█' * 20}]{S.E} ")
-                    sys.stdout.write(f"{S.W}100%{S.E} ")
-                    sys.stdout.write(f"{S.M}({downloaded/1024/1024:5.1f} MB){S.E}\n")
-                    
-                    total_bytes += downloaded
-                    completed += 1
+                with open(save_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if total_size > 0:
+                                percent = int(20 * downloaded / total_size)
+                                bar = '█' * percent + '░' * (20 - percent)
+                                
+                                sys.stdout.write(f"\r    {S.C}↓{S.E} {short_name:15} ")
+                                sys.stdout.write(f"{S.G}[{bar}]{S.E} ")
+                                sys.stdout.write(f"{S.W}{int(100 * downloaded / total_size):3d}%{S.E}")
+                                sys.stdout.flush()
+                
+                sys.stdout.write(f"\r    {S.G}✓{S.E} {short_name:15} ")
+                sys.stdout.write(f"{S.G}[{'█' * 20}]{S.E} ")
+                sys.stdout.write(f"{S.W}100%{S.E} ")
+                sys.stdout.write(f"{S.M}({downloaded/1024/1024:5.1f} MB){S.E}\n")
+                
+                total_bytes += downloaded
+                completed += 1
 
-                except requests.RequestException as e:
-                    sys.stdout.write(f"\r    {S.R}✗{S.E} {short_name:15} {S.R}Failed{S.E}\n")
+            except requests.RequestException as e:
+                sys.stdout.write(f"\r    {S.R}✗{S.E} {short_name:15} {S.R}Failed{S.E}\n")
+                print_substep(f"Error: {str(e)[:50]}")
 
-            print()
-            print(f"    {S.C}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{S.E}")
-            print_step(S.SUCCESS, S.G, "SUMMARY", f"Downloaded {completed}/{total_files} files")
-            print_substep(f"Total size: {S.M}{total_bytes/(1024*1024):.1f} MB{S.E}")
+        print()
+        print(f"    {S.C}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{S.E}")
+        print_step(S.SUCCESS, S.G, "SUMMARY", f"Downloaded {completed}/{total_files} files")
+        print_substep(f"Total size: {S.M}{total_bytes/(1024*1024):.1f} MB{S.E}")
+        
     def Check_LXD_Status(self):
         print_step(S.INFO, S.B, "STATUS", "Checking LXD installation status...")
         
-        self.snap_installed = True
-        self.lxd_installed = True
-        self.lxd_initialized = True
+        self.snap_installed = False
+        self.lxd_installed = False
+        self.lxd_initialized = False
         
+        # Check if snapd is installed
         try:
-            result = self.run_cmd(["snap", "version"], check=True,
+            result = self.run_cmd(["snap", "version"], check=False,
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            version = result.stdout.split('\n')[0].split()[-1] if result.stdout else "unknown"
-            print_step(S.SUCCESS, S.G, "SNAP", f"snapd is installed (v{version})")
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            print_step(S.WARNING, S.Y, "SNAP", "snapd not installed")
-            self.snap_installed = False
-
-   
-        try:
-            result = self.run_cmd(["snap", "list", "lxd"], check=True,
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            print_step(S.SUCCESS, S.G, "LXD", "LXD snap is installed")
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            print_step(S.WARNING, S.Y, "LXD", "LXD not installed")
-            self.lxd_installed = False
-            
-
-        try:
-            result = self.run_cmd(["lxc", "info"], check=True,
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-       
-            for line in result.stdout.split('\n'):
-                if "version" in line.lower():
-                    version = line.split(':')[-1].strip()
-                    print_step(S.SUCCESS, S.G, "INIT", f"LXD is initialized (v{version})")
-                    break
+            if result.returncode == 0:
+                version = result.stdout.split('\n')[0].split()[-1] if result.stdout else "unknown"
+                print_step(S.SUCCESS, S.G, "SNAP", f"snapd is installed (v{version})")
+                self.snap_installed = True
             else:
-                print_step(S.SUCCESS, S.G, "INIT", "LXD is initialized")
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            print_step(S.WARNING, S.Y, "INIT", "LXD not initialized")
-            self.lxd_initialized = False
+                print_step(S.WARNING, S.Y, "SNAP", "snapd not installed")
+        except:
+            print_step(S.WARNING, S.Y, "SNAP", "snapd not installed")
+   
+        # Check if LXD is installed
+        try:
+            result = self.run_cmd(["lxc", "info"], check=False,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if result.returncode == 0:
+                for line in result.stdout.split('\n'):
+                    if "version" in line.lower():
+                        version = line.split(':')[-1].strip()
+                        print_step(S.SUCCESS, S.G, "LXD", f"LXD is installed (v{version})")
+                        self.lxd_installed = True
+                        break
+                
+                if "storage" in result.stdout.lower() or "images" in result.stdout.lower():
+                    print_step(S.SUCCESS, S.G, "INIT", "LXD is initialized")
+                    self.lxd_initialized = True
+                else:
+                    print_step(S.WARNING, S.Y, "INIT", "LXD not initialized")
+            else:
+                print_step(S.WARNING, S.Y, "LXD", "LXD not installed")
+        except:
+            print_step(S.WARNING, S.Y, "LXD", "LXD not installed")
             
-        if self.snap_installed and self.lxd_installed and self.lxd_initialized:
+        if self.lxd_installed and self.lxd_initialized:
             print_step(S.SUCCESS, S.G, "READY", "LXD is fully ready")
         else:
-            print_step(S.INFO, S.B, "NEXT", "Additional installation required")
-        try:
-            checkPath = os.listdir('/tmp/alpine')
-            expected = ['snapd_2.71-3+b1_amd64.deb', 'lxd_37395.snap',
-                       'alpine-v3.13-x86_64-20210218_0139.tar.gz', 'core_17272.snap',
-                       'core_17272.assert', 'lxd_37395.assert']
-            
-            if sorted(checkPath) == sorted(expected):
-                print()
-                print_success_box("✨ All required files are ready! ✨")
-                print()
-                self.ImageLoad('/tmp/alpine/alpine-v3.13-x86_64-20210218_0139.tar.gz')
-                exit()
-        except FileNotFoundError:
-            pass
+            print_step(S.INFO, S.B, "NEXT", "Installation required")
             
     def Set_LXD(self):
         print_step(S.INSTALL, S.M, "BEGIN", "Starting LXD installation...")
         print()
         
+        # Check if already installed
+        if self.lxd_installed and self.lxd_initialized:
+            print_step(S.SUCCESS, S.G, "OK", "LXD already installed and initialized")
+            return
+        
+        # Check glibc version for snap compatibility
+        glibc_ok = True
+        if self.glibc_version:
+            try:
+                if float(self.glibc_version) < 2.38:
+                    print_step(S.WARNING, S.Y, "GLIBC", f"Version {self.glibc_version} < 2.38")
+                    print_substep("Snap packages may not work - will use apt instead")
+                    glibc_ok = False
+            except:
+                pass
+        
+        # Try snap installation only if snap is available AND glibc is new enough
+        if self.snap_available and glibc_ok:
+            print_substep("Snap available - attempting snap installation")
+            if self.install_lxd_via_snap():
+                return
+            else:
+                print_substep("Snap installation failed - falling back to apt")
+                self.install_lxd_via_apt()
+        else:
+            print_substep("Using apt installation")
+            self.install_lxd_via_apt()
+    
+    def install_lxd_via_snap(self):
+        """Install LXD using snap packages"""
         commands = []
+        
+        # Check if we need to install snapd
         if not self.snap_installed:
-            commands.append({
-                "cmd": ["dpkg", "-i", "/tmp/alpine/snapd_2.71-3+b1_amd64.deb"],
-                "desc": "Installing snapd"
-            })
+            # Find snapd file
+            snapd_file = None
+            for f in os.listdir(self.download_path):
+                if f.startswith("snapd") and f.endswith(".deb"):
+                    snapd_file = os.path.join(self.download_path, f)
+                    break
             
-        if not self.lxd_installed:
+            if snapd_file:
+                commands.append({
+                    "cmd": ["dpkg", "-i", snapd_file],
+                    "desc": f"Installing {os.path.basename(snapd_file)}"
+                })
+            else:
+                print_step(S.WARNING, S.Y, "SNAP", "No snapd package found")
+                return False
+        
+        # Add snap commands if files exist
+        core_assert = os.path.join(self.download_path, "core_17272.assert")
+        core_snap = os.path.join(self.download_path, "core_17272.snap")
+        lxd_assert = os.path.join(self.download_path, "lxd_37395.assert")
+        lxd_snap = os.path.join(self.download_path, "lxd_37395.snap")
+        
+        if os.path.exists(core_assert) and os.path.exists(core_snap):
             commands.extend([
                 {
-                    "cmd": ["snap", "ack", "/tmp/alpine/core_17272.assert"],
+                    "cmd": ["snap", "ack", core_assert],
                     "desc": "Acknowledging core snap"
                 },
                 {
-                    "cmd": ["snap", "install", "/tmp/alpine/core_17272.snap"],
+                    "cmd": ["snap", "install", core_snap],
                     "desc": "Installing core snap"
-                },
+                }
+            ])
+        
+        if os.path.exists(lxd_assert) and os.path.exists(lxd_snap):
+            commands.extend([
                 {
-                    "cmd": ["snap", "ack", "/tmp/alpine/lxd_37395.assert"],
+                    "cmd": ["snap", "ack", lxd_assert],
                     "desc": "Acknowledging LXD snap"
                 },
                 {
-                    "cmd": ["snap", "install", "/tmp/alpine/lxd_37395.snap"],
+                    "cmd": ["snap", "install", lxd_snap],
                     "desc": "Installing LXD snap"
-                },
+                }
             ])
 
         if not commands:
-            print_step(S.INFO, S.B, "SKIP", "LXD already installed, skipping installation")
-            return
+            print_step(S.ERROR, S.R, "ERROR", "No snap packages found")
+            return False
 
         for i, cmd_info in enumerate(commands, 1):
             cmd = cmd_info["cmd"]
             desc = cmd_info["desc"]
-            cmd_str = ' '.join(cmd)
             
-            print(f"    {S.C}[{i}/{len(commands)}]{S.E} {S.O}{desc}{S.E}")
-            print(f"    {S.C}  └─{S.E} {S.W}{cmd_str}{S.E}")
+            print(f"    {S.C}[{i}/{len(commands)}]{S.E} {desc}... ", end="", flush=True)
             
             try:
-                result = self.run_cmd(cmd, check=True,
-                                      stdout=subprocess.PIPE,
-                                      stderr=subprocess.PIPE,
-                                      text=True)
-                print_step(S.SUCCESS, S.G, "OK", f"Step {i} completed")
-                
-            except subprocess.CalledProcessError as e:
-                print_step(S.ERROR, S.R, "FAIL", f"Step {i} failed")
-                print(f"    {S.R}Error: {e.stderr[:100]}{S.E}")
-                return
+                # For dpkg, handle dependencies
+                if cmd[0] == "dpkg":
+                    result = self.run_cmd(cmd, check=False, 
+                                        stdout=subprocess.PIPE, 
+                                        stderr=subprocess.PIPE)
+                    if result.returncode != 0:
+                        print(f"{S.Y}⚠{S.E}")
+                        print_substep("Fixing dependencies...")
+                        self.run_cmd_quiet(["apt-get", "install", "-f", "-y"], check=False)
+                        self.run_cmd_quiet(cmd, check=True)
+                    else:
+                        print(f"{S.G}✓{S.E}")
+                else:
+                    self.run_cmd_quiet(cmd, check=True)
+                    print(f"{S.G}✓{S.E}")
+                    
+            except subprocess.CalledProcessError:
+                print(f"{S.R}✗{S.E}")
+                return False
 
-        print()
-        print_step(S.SUCCESS, S.G, "DONE", "LXD installation completed")
-        
+        # Initialize LXD
+        print(f"    {S.C}[{len(commands)+1}/{len(commands)+1}]{S.E} Initializing LXD... ", end="", flush=True)
         try:
-            print_step(S.WAIT, S.B, "SNAP", "Starting snapd service...")
-            self.run_cmd(["systemctl", "start", "snapd"], check=True)
-
-            print_step(S.WAIT, S.B, "WAIT", "Waiting for snap to be ready...")
-            for attempt in range(10):
-                result = self.run_cmd(["snap", "version"],
-                                      stdout=subprocess.PIPE,
-                                      stderr=subprocess.PIPE)
-                if result.returncode == 0:
-                    print_step(S.SUCCESS, S.G, "READY", "snapd is responding")
+            self.run_cmd_quiet(["lxd", "init", "--auto"], check=True)
+            print(f"{S.G}✓{S.E}")
+            print_step(S.SUCCESS, S.G, "DONE", "LXD installed via snap")
+            self.lxd_installed = True
+            self.lxd_initialized = True
+            return True
+        except:
+            print(f"{S.R}✗{S.E}")
+            return False
+    
+    def install_lxd_via_apt(self):
+        """Install LXD using apt"""
+        steps = [
+            ("Updating package list", ["apt", "update"]),
+            ("Installing LXD", ["apt", "install", "lxd", "lxd-client", "-y"]),
+            ("Adding user to lxd group", ["usermod", "-aG", "lxd"]),
+            ("Initializing LXD", ["lxd", "init", "--auto"])
+        ]
+        
+        total_steps = len(steps)
+        success = True
+        
+        for i, (desc, cmd) in enumerate(steps, 1):
+            print(f"    {S.C}[{i}/{total_steps}]{S.E} {desc}... ", end="", flush=True)
+            
+            if cmd[0] == "usermod":
+                username = os.getenv("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name
+                full_cmd = cmd + [username]
+            else:
+                full_cmd = cmd
+            
+            try:
+                self.run_cmd_quiet(full_cmd, check=True)
+                print(f"{S.G}✓{S.E}")
+            except subprocess.CalledProcessError:
+                print(f"{S.R}✗{S.E}")
+                if i == 1:  # apt update failed
+                    success = False
                     break
-                print(f"    {S.C}└─ Attempt {attempt+1}/10...{S.E}")
-                time.sleep(1)
-            else:
-                print_step(S.ERROR, S.R, "ERROR", "snapd is not responding")
-                return
-
-            print_step(S.INSTALL, S.M, "INIT", "Running automatic LXD init...")
-            self.run_cmd(["lxd", "init", "--auto"], check=True)
-
-            print_step(S.INFO, S.B, "VERIFY", "Verifying LXD installation...")
-            result = self.run_cmd(["lxc", "info"],
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE,
-                                  text=True)
-
-            if result.returncode == 0:
-                print_step(S.SUCCESS, S.G, "READY", "LXD is fully initialized and working")
-                
-                self.lxd_initialized = True
-                self.lxd_installed = True
-            else:
-                print_step(S.ERROR, S.R, "FAIL", "LXD initialization failed")
-
-        except subprocess.CalledProcessError as e:
-            print_step(S.ERROR, S.R, "ERROR", f"LXD initialization failed: {e}")
+        
+        if success:
+            print_step(S.SUCCESS, S.G, "DONE", "LXD installed via apt")
+            self.lxd_installed = True
+            self.lxd_initialized = True
+        else:
+            print_step(S.ERROR, S.R, "FAIL", "LXD installation failed")
             
     def ImageLoad(self, imagepath):
         print_step(S.CONTAINER, S.C, "START", "Setting up container...")
@@ -576,7 +721,8 @@ class LXD_Helper:
         cleanup = input(f"    {S.Y}Cleanup container? (y/n){S.E}: ").strip().lower()
         if cleanup == 'y':
             self.cleanup()
-
+    
+    
 if __name__ == '__main__':
     try:
         LXD_Helper()
