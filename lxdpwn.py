@@ -839,6 +839,7 @@ class LXD_Helper:
             print_step(S.ERROR, S.R, "FAIL", "LXD installation failed")
             
     def ImageLoad(self, imagepath):
+        self.cleanup()
         print_step(S.CONTAINER, S.C, "START", "Setting up container...")
         print()
 
