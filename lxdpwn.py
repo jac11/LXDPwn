@@ -89,6 +89,20 @@ def print_success_box(message):
     print(f"{S.G}┌{'─' * length}┐{S.E}")
     print(f"{S.G}│  {message}  │{S.E}")
     print(f"{S.G}└{'─' * length}┘{S.E}")
+# Python 3.6 and older compatibility
+if not hasattr(subprocess, 'run'):
+    print_step(S.ERROR, S.R, "ERROR", "Python 3.5+ required")
+    sys.exit(1)
+
+# Create a wrapper function that handles text/universal_newlines
+def run_cmd_compat(cmd, **kwargs):
+    if 'text' in kwargs:
+        kwargs['universal_newlines'] = kwargs.pop('text')
+    if 'capture_output' in kwargs:
+        kwargs['stdout'] = subprocess.PIPE
+        kwargs['stderr'] = subprocess.PIPE
+        del kwargs['capture_output']
+    return subprocess.run(cmd, **kwargs)    
 
 class LXD_Helper:
     def __init__(self):
@@ -97,12 +111,13 @@ class LXD_Helper:
         self.download_path = "/tmp/alpine"
         os.makedirs(self.download_path, exist_ok=True)
 
-        self.need_sudo        = False
-        self.online_mode      = False
-        self.lxd_installed    = False
-        self.lxd_initialized  = False
-        self.snap_available   = False
-        self.glibc_version    = self.get_glibc_version()
+        self.need_sudo = False           # For LXD commands (lxc, lxd, snap)
+        self.need_sudo_for_system = False # For system commands (apt, dpkg, usermod)
+        self.online_mode = False
+        self.lxd_installed = False
+        self.lxd_initialized = False
+        self.snap_available = False
+        self.glibc_version = self.get_glibc_version()
         
         print_section("INITIALIZATION")
         print_step(S.INFO, S.B, "WORKSPACE", f"Download directory: {self.download_path}")
@@ -165,7 +180,8 @@ class LXD_Helper:
         """Get system glibc version"""
         try:
             result = subprocess.run(["ldd", "--version"], 
-                                   capture_output=True, text=True)
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+                                   universal_newlines=True)
             version_match = re.search(r'(\d+\.\d+)', result.stdout)
             if version_match:
                 return version_match.group(1)
@@ -184,10 +200,11 @@ class LXD_Helper:
                                    stderr=subprocess.PIPE)
             if result.returncode == 0:
                 # Check if snapd is actually working
-                version_result = subprocess.run(["snap", "version"], 
+                result = subprocess.run(["snap", "version"], 
                                               stdout=subprocess.PIPE, 
-                                              stderr=subprocess.PIPE)
-                if version_result.returncode == 0:
+                                              stderr=subprocess.PIPE,
+                                              universal_newlines=True)
+                if result.returncode == 0:
                     self.snap_available = True
                     print_step(S.SUCCESS, S.G, "SNAP", "Snap is available")
                     return True
@@ -220,7 +237,7 @@ class LXD_Helper:
             try:
                 result = subprocess.run(["sudo", "-v"], 
                                        stderr=subprocess.PIPE,
-                                       text=True)
+                                       universal_newlines=True)
                 
                 if result.returncode == 0:
                     print_step(S.SUCCESS, S.G, "SUDO", "Authentication successful")
@@ -237,16 +254,50 @@ class LXD_Helper:
             except Exception as e:
                 print_step(S.ERROR, S.R, "SUDO", f"Error: {str(e)}")
                 return False
-    
+                
     def run_cmd(self, cmd, **kwargs):
-  
-        if self.need_sudo and cmd[0] != "sudo":
+        """Run command with sudo only for system commands"""
+        system_cmds = ['apt', 'apt-get', 'dpkg', 'usermod', 'systemctl']
+        
+        # Convert text to universal_newlines for older Python
+        if 'text' in kwargs:
+            kwargs['universal_newlines'] = kwargs.pop('text')
+        
+        # Handle capture_output for older Python
+        if 'capture_output' in kwargs:
+            kwargs['stdout'] = subprocess.PIPE
+            kwargs['stderr'] = subprocess.PIPE
+            del kwargs['capture_output']
+        
+        # Add sudo only for system commands when needed
+        if cmd[0] in system_cmds and self.need_sudo_for_system:
+            if cmd[0] != "sudo":
+                cmd = ["sudo"] + cmd
+        elif self.need_sudo and cmd[0] != "sudo":
+            # For backward compatibility
             cmd = ["sudo"] + cmd
+            
         return subprocess.run(cmd, **kwargs)
     
     def run_cmd_quiet(self, cmd, **kwargs):
         """Run command quietly with no output"""
-        if self.need_sudo and cmd[0] != "sudo":
+        system_cmds = ['apt', 'apt-get', 'dpkg', 'usermod', 'systemctl']
+        
+        # Convert text to universal_newlines for older Python
+        if 'text' in kwargs:
+            kwargs['universal_newlines'] = kwargs.pop('text')
+        
+        # Handle capture_output for older Python
+        if 'capture_output' in kwargs:
+            kwargs['stdout'] = subprocess.PIPE
+            kwargs['stderr'] = subprocess.PIPE
+            del kwargs['capture_output']
+        
+        # Add sudo only for system commands when needed
+        if cmd[0] in system_cmds and self.need_sudo_for_system:
+            if cmd[0] != "sudo":
+                cmd = ["sudo"] + cmd
+        elif self.need_sudo and cmd[0] != "sudo":
             cmd = ["sudo"] + cmd
         
         if 'stdout' not in kwargs:
@@ -255,15 +306,31 @@ class LXD_Helper:
             kwargs['stderr'] = subprocess.DEVNULL
             
         return subprocess.run(cmd, **kwargs)
+    
+    def run_lxc_cmd(self, cmd, **kwargs):
+        """Run LXC/LXD commands without sudo (lxd group users don't need sudo)"""
+        # Convert text to universal_newlines for older Python
+        if 'text' in kwargs:
+            kwargs['universal_newlines'] = kwargs.pop('text')
+        
+        # Handle capture_output for older Python
+        if 'capture_output' in kwargs:
+            kwargs['stdout'] = subprocess.PIPE
+            kwargs['stderr'] = subprocess.PIPE
+            del kwargs['capture_output']
+        
+        # Never add sudo for LXC commands
+        return subprocess.run(cmd, **kwargs)
         
     def cleanup(self):
         print_step(S.CLEAN, S.Y, "CLEANUP", "Stopping and removing containers...")
-        self.run_cmd(["lxc", "stop", "alpine-container", "--force"],
-                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.run_cmd(["lxc", "delete", "alpine-container"],
-                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.run_cmd(["lxc", "image", "delete", "alpine-local"],
-                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Use run_lxc_cmd for LXC commands (no sudo)
+        self.run_lxc_cmd(["lxc", "stop", "alpine-container", "--force"],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.run_lxc_cmd(["lxc", "delete", "alpine-container"],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.run_lxc_cmd(["lxc", "image", "delete", "alpine-local"],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         print_step(S.SUCCESS, S.G, "DONE", "Cleanup completed successfully")
     
     def Check_compatibility(self):
@@ -286,15 +353,14 @@ class LXD_Helper:
         if is_root:
             print_step(S.SUCCESS, S.G, "OK", "Running as root — full access granted")
             self.need_sudo = False
+            self.need_sudo_for_system = False
             return True
         elif in_lxd_group:
             print_step(S.SUCCESS, S.G, "OK", f"User in lxd group — container access granted")
-            self.need_sudo = True
-
-            if not self.check_sudo_access():
-                print_step(S.ERROR, S.R, "ERROR", "Cannot proceed without sudo access")
-                sys.exit(1)
-                
+            # LXD commands don't need sudo for lxd group users
+            self.need_sudo = False
+            # System commands still need sudo
+            self.need_sudo_for_system = True
             return True
         else:
             print_step(S.ERROR, S.R, "ERROR", f"User {username} not in lxd group and not root")
@@ -414,8 +480,10 @@ class LXD_Helper:
         
         # Check if snapd is installed
         try:
-            result = self.run_cmd(["snap", "version"], check=False,
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            # Use run_lxc_cmd for snap commands (no sudo for lxd group users)
+            result = subprocess.run(["snap", "version"], 
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+                                   universal_newlines=True)
             if result.returncode == 0:
                 version = result.stdout.split('\n')[0].split()[-1] if result.stdout else "unknown"
                 print_step(S.SUCCESS, S.G, "SNAP", f"snapd is installed (v{version})")
@@ -427,8 +495,10 @@ class LXD_Helper:
    
         # Check if LXD is installed
         try:
-            result = self.run_cmd(["lxc", "info"], check=False,
-                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            # Use run_lxc_cmd for lxc commands (no sudo)
+            result = subprocess.run(["lxc", "info"], 
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+                                   universal_newlines=True)
             if result.returncode == 0:
                 for line in result.stdout.split('\n'):
                     if "version" in line.lower():
@@ -465,7 +535,9 @@ class LXD_Helper:
         # Check if snapd is installed
         snapd_installed = False
         try:
-            self.run_cmd_quiet(["snap", "version"], check=True)
+            subprocess.run(["snap", "version"], 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                         check=True)
             snapd_installed = True
             print_substep("Snapd is already installed")
         except:
@@ -512,7 +584,9 @@ class LXD_Helper:
         
         # Verify snapd is working
         try:
-            self.run_cmd_quiet(["snap", "version"], check=True)
+            subprocess.run(["snap", "version"], 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                         check=True)
             print_substep("Snapd is working")
         except:
             print_step(S.ERROR, S.R, "ERROR", "Snapd installed but not responding")
@@ -538,16 +612,22 @@ class LXD_Helper:
         # Install core snap with --dangerous flag
         print(f"    {S.C}[1/5]{S.E} Installing core snap... ", end="", flush=True)
         try:
-            self.run_cmd_quiet(["snap", "ack", core_assert], check=True)
+            subprocess.run(["snap", "ack", core_assert], 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                         check=True)
             # Use --dangerous for local snap file
-            self.run_cmd_quiet(["snap", "install", "--dangerous", core_snap], check=True)
+            subprocess.run(["snap", "install", "--dangerous", core_snap], 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                         check=True)
             print(f"{S.G}✓{S.E}")
         except subprocess.CalledProcessError as e:
             print(f"{S.R}✗{S.E}")
             # Try without --dangerous as fallback
             print_substep("Retrying without --dangerous...")
             try:
-                self.run_cmd_quiet(["snap", "install", core_snap], check=True)
+                subprocess.run(["snap", "install", core_snap], 
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                             check=True)
                 print(f"    {S.C}   └─{S.E} {S.G}✓{S.E}")
             except:
                 print_substep(f"Error: {e}")
@@ -556,16 +636,22 @@ class LXD_Helper:
         # Install LXD snap with --dangerous flag
         print(f"    {S.C}[2/5]{S.E} Installing LXD snap... ", end="", flush=True)
         try:
-            self.run_cmd_quiet(["snap", "ack", lxd_assert], check=True)
+            subprocess.run(["snap", "ack", lxd_assert], 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                         check=True)
             # Use --dangerous for local snap file
-            self.run_cmd_quiet(["snap", "install", "--dangerous", lxd_snap], check=True)
+            subprocess.run(["snap", "install", "--dangerous", lxd_snap], 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                         check=True)
             print(f"{S.G}✓{S.E}")
         except subprocess.CalledProcessError as e:
             print(f"{S.R}✗{S.E}")
             # Try without --dangerous as fallback
             print_substep("Retrying without --dangerous...")
             try:
-                self.run_cmd_quiet(["snap", "install", lxd_snap], check=True)
+                subprocess.run(["snap", "install", lxd_snap], 
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                             check=True)
                 print(f"    {S.C}   └─{S.E} {S.G}✓{S.E}")
             except:
                 print_substep(f"Error: {e}")
@@ -574,7 +660,9 @@ class LXD_Helper:
         # Connect LXD (optional)
         print(f"    {S.C}[3/5]{S.E} Connecting LXD... ", end="", flush=True)
         try:
-            self.run_cmd_quiet(["snap", "connect", "lxd:lxd", "core:lxd"], check=False)
+            subprocess.run(["snap", "connect", "lxd:lxd", "core:lxd"], 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                         check=False)
             print(f"{S.G}✓{S.E}")
         except:
             print(f"{S.Y}⚠{S.E}")
@@ -582,7 +670,9 @@ class LXD_Helper:
         # Initialize LXD
         print(f"    {S.C}[4/5]{S.E} Initializing LXD... ", end="", flush=True)
         try:
-            self.run_cmd_quiet(["lxd", "init", "--auto"], check=True)
+            subprocess.run(["lxd", "init", "--auto"], 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                         check=True)
             print(f"{S.G}✓{S.E}")
         except:
             print(f"{S.R}✗{S.E}")
@@ -601,6 +691,7 @@ class LXD_Helper:
         self.lxd_installed = True
         self.lxd_initialized = True
         return True
+        
     def install_lxd_via_snap(self):
         """Install LXD using snap packages"""
         commands = []
@@ -666,9 +757,10 @@ class LXD_Helper:
             try:
                 # For dpkg, handle dependencies
                 if cmd[0] == "dpkg":
-                    result = self.run_cmd(cmd, check=False, 
+                    result = self.run_cmd(cmd, 
                                         stdout=subprocess.PIPE, 
-                                        stderr=subprocess.PIPE)
+                                        stderr=subprocess.PIPE, 
+                                        check=False)
                     if result.returncode != 0:
                         print(f"{S.Y}⚠{S.E}")
                         print_substep("Fixing dependencies...")
@@ -677,7 +769,10 @@ class LXD_Helper:
                     else:
                         print(f"{S.G}✓{S.E}")
                 else:
-                    self.run_cmd_quiet(cmd, check=True)
+                    # For snap commands, no sudo needed for lxd group users
+                    subprocess.run(cmd, 
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                                 check=True)
                     print(f"{S.G}✓{S.E}")
                     
             except subprocess.CalledProcessError:
@@ -687,7 +782,9 @@ class LXD_Helper:
         # Initialize LXD
         print(f"    {S.C}[{len(commands)+1}/{len(commands)+1}]{S.E} Initializing LXD... ", end="", flush=True)
         try:
-            self.run_cmd_quiet(["lxd", "init", "--auto"], check=True)
+            subprocess.run(["lxd", "init", "--auto"], 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                         check=True)
             print(f"{S.G}✓{S.E}")
             print_step(S.SUCCESS, S.G, "DONE", "LXD installed via snap")
             self.lxd_installed = True
@@ -719,7 +816,14 @@ class LXD_Helper:
                 full_cmd = cmd
             
             try:
-                self.run_cmd_quiet(full_cmd, check=True)
+                # For apt commands, use run_cmd_quiet (handles sudo)
+                if cmd[0] in ['apt', 'apt-get']:
+                    self.run_cmd_quiet(full_cmd, check=True)
+                else:
+                    # For lxd init, no sudo needed
+                    subprocess.run(full_cmd, 
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                                 check=True)
                 print(f"{S.G}✓{S.E}")
             except subprocess.CalledProcessError:
                 print(f"{S.R}✗{S.E}")
@@ -740,60 +844,77 @@ class LXD_Helper:
 
         print_step(S.INSTALL, S.M, "LXD", "Ensuring LXD is initialized...")
         try:
-            self.run_cmd(["lxd", "init", "--auto"], check=True,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # lxd init doesn't need sudo for lxd group users
+            subprocess.run(["lxd", "init", "--auto"], 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                         check=True)
             print_step(S.SUCCESS, S.G, "OK", "LXD is ready")
         except subprocess.CalledProcessError:
             print_step(S.ERROR, S.R, "FAIL", "LXD initialization failed")
             return
 
         print_step(S.DOWNLOAD, S.C, "IMAGE", "Checking Alpine image...")
-        if self.run_cmd(["lxc", "image", "list", "alpine-local", "--format", "json"],
-                         capture_output=True).returncode == 0:
+        result = subprocess.run(["lxc", "image", "list", "alpine-local", "--format", "json"], 
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+                               universal_newlines=True)
+        if result.returncode == 0 and 'alpine-local' in result.stdout:
             print_step(S.SUCCESS, S.G, "EXISTS", "Image already loaded")
-            self.cleanup()
-
-        print_step(S.DOWNLOAD, S.C, "IMPORT", "Importing Alpine image...")
-        try:
-            result = self.run_cmd(["lxc", "image", "import", imagepath, "--alias", "alpine-local"],
-                                  check=True, capture_output=True, text=True)
-         
-            for line in result.stdout.split('\n'):
-                if "fingerprint" in line:
-                    fingerprint = line.split(':')[-1].strip()[:]
-                    print_step(S.SUCCESS, S.G, "IMPORT", f"Image imported (fingerprint: {fingerprint})")
-                    break
-            else:
+        else:
+            print_step(S.DOWNLOAD, S.C, "IMPORT", "Importing Alpine image...")
+            try:
+                result = subprocess.run(["lxc", "image", "import", imagepath, "--alias", "alpine-local"], 
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+                                       universal_newlines=True)
                 print_step(S.SUCCESS, S.G, "IMPORT", "Image imported successfully")
-        except subprocess.CalledProcessError:
-            print_step(S.ERROR, S.R, "FAIL", "Image import failed")
-            return
+            except subprocess.CalledProcessError:
+                print_step(S.ERROR, S.R, "FAIL", "Image import failed")
+                return
 
         print_step(S.CONTAINER, S.C, "LAUNCH", "Launching privileged container...")
         try:
-            result = self.run_cmd([
+            result = subprocess.run([
                 "lxc", "launch",
                 "alpine-local",
                 "alpine-container",
                 "-c", "security.privileged=true",
                 "-c", "security.nesting=true"
-            ], check=True, capture_output=True, text=True)
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+               universal_newlines=True, check=False)  # Changed check=True to check=False
             
-           
-            time.sleep(3)
-            print_step(S.SUCCESS, S.G, "START", "Container is running")
-      
-            status = self.run_cmd(["lxc", "list", "alpine-container", "--format", "json"],
-                                  capture_output=True, text=True)
+            if result.returncode != 0:
+                print_step(S.ERROR, S.R, "FAIL", "Container launch failed")
+                print_substep(f"Error: {result.stderr.strip()}")
+                print_substep("Checking for existing container...")
+                
+                # Check if container already exists
+                check = subprocess.run(["lxc", "list", "alpine-container", "--format", "json"],
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                      universal_newlines=True)
+                if 'alpine-container' in check.stdout:
+                    print_substep("Container already exists, trying to use it...")
+                else:
+                    # Check if image exists
+                    image_check = subprocess.run(["lxc", "image", "list", "alpine-local", "--format", "json"],
+                                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                                universal_newlines=True)
+                    if 'alpine-local' not in image_check.stdout:
+                        print_substep("Image 'alpine-local' not found!")
+                    return
+            else:
+                print_step(S.SUCCESS, S.G, "START", "Container is running")
+          
+            status = subprocess.run(["lxc", "list", "alpine-container", "--format", "json"],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+                                  universal_newlines=True)
             print_substep(f"Container: {S.O}alpine-container{S.E}")
             
-        except subprocess.CalledProcessError:
-            print_step(S.ERROR, S.R, "FAIL", "Container launch failed")
+        except Exception as e:
+            print_step(S.ERROR, S.R, "FAIL", f"Container launch failed: {str(e)}")
             return
 
         print_step(S.INSTALL, S.M, "MOUNT", "Mounting host filesystem...")
         try:
-            result = self.run_cmd([
+            result = subprocess.run([
                 "lxc", "config", "device", "add",
                 "alpine-container",
                 "host-root",
@@ -801,18 +922,18 @@ class LXD_Helper:
                 "source=/",
                 "path=/mnt/root",
                 "recursive=true"
-            ], check=True, capture_output=True, text=True)
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+               universal_newlines=True, check=True)
             print_step(S.SUCCESS, S.G, "MOUNT", "Host filesystem mounted at /mnt/root")
             
             try:
-          
-                self.run_cmd(
+                subprocess.run(
                     ["lxc", "exec", "alpine-container", "--", "chroot", "/mnt/root", "/bin/bash"],
                     check=True
                 )
             except subprocess.CalledProcessError:
                 print("[!] First chroot attempt failed, trying fallback...")
-                self.run_cmd(
+                subprocess.run(
                     ["lxc", "exec", "alpine-container", "--", "chroot", "/mnt/root", "/bin/bash"],
                     check=False
                 )
@@ -829,7 +950,7 @@ class LXD_Helper:
         print(f"    {S.Y}└─{S.E} Type {S.R}'exit'{S.E} to close the shell")
         print()
         
-        self.run_cmd(["lxc", "exec", "alpine-container", "--", "/bin/sh"])
+        subprocess.run(["lxc", "exec", "alpine-container", "--", "/bin/sh"])
         
        
         print()
