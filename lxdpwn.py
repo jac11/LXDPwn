@@ -172,9 +172,9 @@ class LXD_Helper:
                 missing.append(filename)
         return missing
     def check_offline_files_silent(self, base_url):
+        available = []
         for filename in self.required_files.keys():
             try:
-                available = []
                 response = requests.head(base_url + filename, timeout=5)
                 if response.status_code == 200:
                     available.append(filename)
