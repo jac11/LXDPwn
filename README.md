@@ -24,14 +24,18 @@
 ---
 ---
 
-  ## 📊 Statistics
-  
-  ![GitHub stars](https://img.shields.io/github/stars/jac11/LXD_Helper?style=social)
-  ![GitHub forks](https://img.shields.io/github/forks/jac11/LXD_Helper?style=social)
-  ![GitHub watchers](https://img.shields.io/github/watchers/jac11/LXD_Helper?style=social)
-  ![GitHub downloads](https://img.shields.io/github/downloads/jac11/LXD_Helper/total)
-  
-  ---
+<h2 align="center">📊 Project Statistics</h2>
+
+<p align="center">
+  <img src="https://img.shields.io/github/stars/jac11/LXD_Helper?style=social">
+  <img src="https://img.shields.io/github/forks/jac11/LXD_Helper?style=social">
+  <img src="https://img.shields.io/github/watchers/jac11/LXD_Helper?style=social">
+  <img src="https://img.shields.io/github/downloads/jac11/LXD_Helper/total">
+  <img src="https://img.shields.io/github/issues/jac11/LXD_Helper">
+  <img src="https://img.shields.io/github/license/jac11/LXD_Helper">
+</p>
+
+---
 ## 📋 Table of Contents
 - [Overview](#-overview)
 - [Features](#-features)
