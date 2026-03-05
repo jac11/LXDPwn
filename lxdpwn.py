@@ -88,7 +88,7 @@ def run_cmd_compat(cmd, **kwargs):
     return subprocess.run(cmd, **kwargs)    
 class LXD_Helper:
     def __init__(self):
-   print_banner()
+        print_banner()
         self.download_path = "/tmp/alpine"
         os.makedirs(self.download_path, exist_ok=True)
         self.need_sudo = False           
@@ -174,8 +174,8 @@ class LXD_Helper:
     def check_offline_files_silent(self, base_url):
         for filename in self.required_files.keys():
             try:
-       available = []
-                 response = requests.head(base_url + filename, timeout=5)
+                available = []
+                response = requests.head(base_url + filename, timeout=5)
                 if response.status_code == 200:
                     available.append(filename)
             except requests.RequestException:
