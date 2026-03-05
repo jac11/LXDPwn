@@ -22,7 +22,16 @@
 </p>
 
 ---
+---
 
+  ## 📊 Statistics
+  
+  ![GitHub stars](https://img.shields.io/github/stars/jac11/LXD_Helper?style=social)
+  ![GitHub forks](https://img.shields.io/github/forks/jac11/LXD_Helper?style=social)
+  ![GitHub watchers](https://img.shields.io/github/watchers/jac11/LXD_Helper?style=social)
+  ![GitHub downloads](https://img.shields.io/github/downloads/jac11/LXD_Helper/total)
+  
+  ---
 ## 📋 Table of Contents
 - [Overview](#-overview)
 - [Features](#-features)
