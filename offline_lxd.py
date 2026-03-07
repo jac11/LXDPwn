@@ -50,6 +50,7 @@ def print_banner():
 | |    \  /| | | | |_) \ /\ / / |  |\| |  
 | |___ /  \| |_| |  __/ \ V  V / | |\  |
 |_____/_/\_\____/|_|     \_/\_/  |_| \_|
+             offline Server
                @jacstory
 
 {Colors.END}
