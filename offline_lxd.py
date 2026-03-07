@@ -45,13 +45,13 @@ BASE_URL = "https://github.com/jac11/LXDPwn/releases/download/LXDPwn"
 def print_banner():
 
     banner = f"""
-{Colors.CYAN}{Colors.BOLD} _    __  ______  ______        ___   _ 
-| |   \\ \\/ /  _ \\|  _ \\ \\      / / \\ | |
-| |    \\  /| | | | |_) \\\\ /\\ / /|  \\| |
-| |___ /  \\| |_| |  __/ \\ V  V / | |\\  |
-|_____/_/\\_\\____/|_|     \\_/\\_/  |_| \\_|
-               offline server
-                 @jacstory
+{Colors.CYAN}{Colors.BOLD} _    __  ______  ______        ___   _     
+| |   \ \/ /  _ \|  _ \ \      / / \ | |
+| |    \  /| | | | |_) \ /\ / / |  |\| |  
+| |___ /  \| |_| |  __/ \ V  V / | |\  |
+|_____/_/\_\____/|_|     \_/\_/  |_| \_|
+               @jacstory
+
 {Colors.END}
 """
     print(banner)
